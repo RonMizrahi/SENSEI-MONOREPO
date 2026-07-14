@@ -1,0 +1,307 @@
+// Next-meeting prep report against the real stack: Testcontainers Postgres + full app,
+// with the Anthropic generator stubbed deterministically via overrideProvider.
+import { INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
+import { Test } from '@nestjs/testing';
+import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import request from 'supertest';
+import type { App } from 'supertest/types';
+import { DataSource } from 'typeorm';
+import { z } from 'zod';
+import { configureApp } from '../src/app.setup';
+import { REPORT_GENERATOR, ReportGenerator } from '../src/reports/report-generator.interface';
+import { NO_SUMMARIES_ERROR } from '../src/reports/reports.constants';
+import { registerAndLogin } from './utils/app-factory';
+
+const STUB_MODEL = 'stub-claude';
+const STUB_INTRO = 'מבוא לדוח ההכנה';
+const STUB_CHANGES = ['שינוי ראשון', 'שינוי שני', 'שינוי שלישי'];
+const STUB_OPEN_TOPICS = ['נושא ראשון', 'נושא שני', 'נושא שלישי'];
+const EXCERPT_CAP = 500;
+const POLL_DEADLINE_MS = 30_000;
+const POLL_INTERVAL_MS = 200;
+
+const stubGenerator: ReportGenerator = {
+  generate: () =>
+    Promise.resolve({
+      intro: STUB_INTRO,
+      changes: [...STUB_CHANGES],
+      openTopics: [...STUB_OPEN_TOPICS],
+      model: STUB_MODEL,
+    }),
+};
+
+const reportSchema = z.object({
+  patient_id: z.uuid(),
+  status: z.enum(['pending', 'running', 'ready', 'failed']),
+  intro: z.string().nullable(),
+  changes: z.array(z.string()),
+  open_topics: z.array(z.string()),
+  source_meeting_ids: z.array(z.string()),
+  last_summary_excerpt: z.string().nullable(),
+  generated_at: z.string().nullable(),
+  model: z.string().nullable(),
+  error: z.string().nullable(),
+});
+
+/** Applies env overrides for the app under test and returns a restore function. */
+function applyEnv(overrides: Record<string, string>): () => void {
+  const previous = new Map<string, string | undefined>();
+  for (const [key, value] of Object.entries(overrides)) {
+    previous.set(key, process.env[key]);
+    process.env[key] = value;
+  }
+  return () => {
+    for (const [key, value] of previous) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  };
+}
+
+/**
+ * Boots the full app against the container with the report generator stubbed.
+ * Local variant of test/utils createIntegrationApp (frozen) — needed for overrideProvider.
+ */
+async function bootAppWithStub(container: StartedPostgreSqlContainer): Promise<{
+  app: INestApplication;
+  restore: () => void;
+}> {
+  const restore = applyEnv({
+    MOCK_MODE: 'false',
+    DATABASE_URL: container.getConnectionUri(),
+    LOG_LEVEL: 'fatal',
+  });
+  // import AFTER env is set — module composition reads MOCK_MODE at import time
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { AppModule } = require('../src/app.module') as { AppModule: new () => unknown };
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(REPORT_GENERATOR)
+    .useValue(stubGenerator)
+    .compile();
+  const app = moduleRef.createNestApplication();
+  configureApp(app);
+  await app.init();
+  return { app, restore };
+}
+
+/** Applies 0001_init.sql when the schema is absent (no-op once the boot-time runner lands). */
+async function ensureSchema(dataSource: DataSource): Promise<void> {
+  const existing = await dataSource.query<{ table: string | null }[]>(
+    "SELECT to_regclass('public.patients') AS table",
+  );
+  if (existing[0]?.table) return;
+  const sql = readFileSync(join(__dirname, '../db/migrations/0001_init.sql'), 'utf8');
+  await dataSource.query(sql);
+}
+
+/**
+ * A Bearer token + matching users row. Prefers the real /auth endpoints
+ * (registerAndLogin); falls back to a directly-inserted user + signed JWT while
+ * the auth unit has not landed yet.
+ */
+async function createTherapist(
+  app: INestApplication,
+  dataSource: DataSource,
+): Promise<{ token: string; userId: string }> {
+  try {
+    const { token, email } = await registerAndLogin(app);
+    const rows = await dataSource.query<{ id: string }[]>(
+      'SELECT id FROM users WHERE email = $1',
+      [email],
+    );
+    return { token, userId: rows[0].id };
+  } catch {
+    const userId = randomUUID();
+    const email = `reports-${userId}@test.local`;
+    await dataSource.query(
+      `INSERT INTO users (id, auth_type, role, email, full_name, password_hash)
+       VALUES ($1, 'password', 'therapist', $2, 'Reports IT', 'not-a-real-hash')`,
+      [userId, email],
+    );
+    const jwtService = app.get(JwtService);
+    const token = await jwtService.signAsync({
+      sub: userId,
+      email,
+      full_name: 'Reports IT',
+      auth_type: 'password',
+      role: 'therapist',
+      token_version: 0,
+    });
+    return { token, userId };
+  }
+}
+
+describe('reports (integration)', () => {
+  let container: StartedPostgreSqlContainer;
+  let app: INestApplication;
+  let restore: () => void;
+  let httpServer: App;
+  let dataSource: DataSource;
+  let token: string;
+  let userId: string;
+
+  const pathFor = (patientId: string): string => `/patients/${patientId}/next-meeting-report`;
+
+  /** Inserts a patient row and returns its id. */
+  async function seedPatient(): Promise<string> {
+    const patientId = randomUUID();
+    await dataSource.query(
+      "INSERT INTO patients (id, name, phone) VALUES ($1, 'מטופל בדיקה', '050-0000000')",
+      [patientId],
+    );
+    return patientId;
+  }
+
+  /** Inserts a calendar event for the patient and returns the meeting id. */
+  async function seedMeeting(patientId: string, startAt: string): Promise<string> {
+    const meetingId = randomUUID();
+    await dataSource.query(
+      `INSERT INTO calendar_events (id, title, start_at, end_at, therapist_id, patient_id)
+       VALUES ($1, 'פגישה', $2, $2::timestamptz + interval '50 minutes', $3, $4)`,
+      [meetingId, startAt, userId, patientId],
+    );
+    return meetingId;
+  }
+
+  /** Inserts a meeting summary row. */
+  async function seedSummary(meetingId: string, status: string, text: string): Promise<void> {
+    await dataSource.query(
+      "INSERT INTO meeting_summaries (id, meeting_id, status, text, model) VALUES ($1, $2, $3, $4, 'stub')",
+      [randomUUID(), meetingId, status, text],
+    );
+  }
+
+  /** Polls GET until the report settles (200), asserting 202 on the way. */
+  async function pollUntilSettled(patientId: string): Promise<request.Response> {
+    const deadline = Date.now() + POLL_DEADLINE_MS;
+    for (;;) {
+      const response = await request(httpServer)
+        .get(pathFor(patientId))
+        .set('Authorization', `Bearer ${token}`);
+      if (response.status === 200) return response;
+      expect(response.status).toBe(202);
+      if (Date.now() > deadline) throw new Error('report did not settle in time');
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+    }
+  }
+
+  beforeAll(async () => {
+    container = await new PostgreSqlContainer('postgres:18-alpine').start();
+    ({ app, restore } = await bootAppWithStub(container));
+    httpServer = app.getHttpServer() as App;
+    dataSource = app.get(DataSource);
+    await ensureSchema(dataSource);
+    ({ token, userId } = await createTherapist(app, dataSource));
+  }, 120_000);
+
+  afterAll(async () => {
+    await app.close();
+    await container.stop();
+    restore();
+  });
+
+  it('rejects unauthenticated requests', async () => {
+    await request(httpServer).get(pathFor(randomUUID())).expect(401);
+  });
+
+  it('GET returns 404 before any report was requested', async () => {
+    const patientId = await seedPatient();
+    await request(httpServer)
+      .get(pathFor(patientId))
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404);
+  });
+
+  it('POST returns 404 for an unknown patient', async () => {
+    await request(httpServer)
+      .post(pathFor(randomUUID()))
+      .set('Authorization', `Bearer ${token}`)
+      .expect(404);
+  });
+
+  it('rejects a non-UUID patient id with 400', async () => {
+    await request(httpServer)
+      .get('/patients/not-a-uuid/next-meeting-report')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(400);
+  });
+
+  it('POST → 202 pending → poll → 200 ready with the full contract', async () => {
+    const patientId = await seedPatient();
+    const olderMeeting = await seedMeeting(patientId, '2026-01-05T10:00:00Z');
+    const recentMeeting = await seedMeeting(patientId, '2026-02-05T10:00:00Z');
+    const pendingMeeting = await seedMeeting(patientId, '2026-03-05T10:00:00Z');
+    const recentText = 'ס'.repeat(EXCERPT_CAP + 50);
+    await seedSummary(olderMeeting, 'ready', 'סיכום הפגישה הישנה');
+    await seedSummary(recentMeeting, 'ready', recentText);
+    await seedSummary(pendingMeeting, 'pending', 'עוד לא מוכן');
+
+    const posted = await request(httpServer)
+      .post(pathFor(patientId))
+      .set('Authorization', `Bearer ${token}`)
+      .expect(202);
+    const pendingBody = reportSchema.parse(posted.body);
+    expect(pendingBody).toMatchObject({ patient_id: patientId, status: 'pending' });
+
+    const settled = await pollUntilSettled(patientId);
+    const report = reportSchema.parse(settled.body);
+    expect(report).toEqual({
+      patient_id: patientId,
+      status: 'ready',
+      intro: STUB_INTRO,
+      changes: STUB_CHANGES,
+      open_topics: STUB_OPEN_TOPICS,
+      source_meeting_ids: [olderMeeting, recentMeeting],
+      last_summary_excerpt: recentText.slice(0, EXCERPT_CAP),
+      generated_at: expect.any(String) as string,
+      model: STUB_MODEL,
+      error: null,
+    });
+  });
+
+  it('POST for a patient with no ready summaries settles as failed with the Hebrew error', async () => {
+    const patientId = await seedPatient();
+    await request(httpServer)
+      .post(pathFor(patientId))
+      .set('Authorization', `Bearer ${token}`)
+      .expect(202);
+
+    const settled = await pollUntilSettled(patientId);
+    const report = reportSchema.parse(settled.body);
+    expect(report).toMatchObject({
+      patient_id: patientId,
+      status: 'failed',
+      error: NO_SUMMARIES_ERROR,
+      intro: null,
+      generated_at: null,
+    });
+  });
+
+  it('re-POST wipes a settled report back to pending and regenerates', async () => {
+    const patientId = await seedPatient();
+    const meetingId = await seedMeeting(patientId, '2026-04-05T10:00:00Z');
+    await seedSummary(meetingId, 'ready', 'סיכום יחיד');
+
+    await request(httpServer)
+      .post(pathFor(patientId))
+      .set('Authorization', `Bearer ${token}`)
+      .expect(202);
+    await pollUntilSettled(patientId);
+
+    const reposted = await request(httpServer)
+      .post(pathFor(patientId))
+      .set('Authorization', `Bearer ${token}`)
+      .expect(202);
+    expect(reportSchema.parse(reposted.body)).toMatchObject({
+      status: 'pending',
+      intro: null,
+      generated_at: null,
+    });
+    const settled = await pollUntilSettled(patientId);
+    expect(reportSchema.parse(settled.body).status).toBe('ready');
+  });
+});
