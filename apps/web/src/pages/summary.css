@@ -1,0 +1,10 @@
+/* Summary — hover states ported from the prototype's style-hover attributes.
+   !important is required because the base declarations are inline (ported verbatim). */
+.sum-crumb:hover { color: var(--primary) !important; }
+.sum-outline-btn:hover { border-color: var(--primary) !important; color: var(--primary) !important; }
+.sum-restore:hover { color: var(--primary) !important; }
+.sum-primary-btn:hover { background: var(--primary-dark) !important; }
+
+@media (max-width: 720px) {
+  .sum-grid2 { grid-template-columns: 1fr !important; }
+}

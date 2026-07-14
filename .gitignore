@@ -1,0 +1,25 @@
+# build output
+dist/
+# turborepo
+.turbo/
+# playwright
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+# dependencies
+node_modules/
+# tests
+coverage/
+# environment
+.env
+.env.local
+# logs
+*.log
+npm-debug.log*
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+# typescript
+*.tsbuildinfo

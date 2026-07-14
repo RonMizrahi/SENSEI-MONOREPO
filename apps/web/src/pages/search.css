@@ -1,0 +1,4 @@
+/* Unified search — focus/hover states ported from the prototype's style-focus / style-hover. */
+.search-main-input:focus { border-color: var(--primary); }
+.search-clear:hover { fill: var(--text); }
+.search-result-row:hover { background: var(--surface-2); }

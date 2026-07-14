@@ -1,0 +1,401 @@
+/* Dedicated mobile experience — phone-width, touch-first. Rendered instead of
+   the desktop AppShell below 768px (see App.tsx / useIsMobile). All colors are
+   tokens; all directional props are logical (RTL-safe). Animations inherit the
+   global reduced-motion neutralization from tokens.css. */
+
+.mob-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* ---- header ---- */
+.mob-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--divider);
+}
+.mob-iconbtn {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  border: 1px solid var(--divider);
+  background: var(--surface);
+  color: var(--primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+.mob-iconbtn:hover { border-color: var(--primary-border); background: var(--primary-surface); }
+.mob-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--primary-tint);
+  color: var(--primary);
+  font-weight: 800;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.mob-content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+/* ---- day view ---- */
+.mob-monthbtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 2px;
+  font-family: inherit;
+  color: var(--primary);
+}
+.mob-month-title { font-size: 23px; font-weight: 800; letter-spacing: -0.02em; }
+
+.mob-daystrip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 8px 16px 14px;
+  scrollbar-width: none;
+}
+.mob-daystrip::-webkit-scrollbar { display: none; }
+.mob-day-btn {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 46px;
+  padding: 9px 0 10px;
+  border-radius: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  border: 1px solid var(--divider);
+  background: var(--surface);
+}
+.mob-day-btn.is-selected {
+  background: var(--primary);
+  border-color: var(--primary);
+  box-shadow: 0 2px 8px rgba(16, 40, 80, 0.22);
+}
+.mob-day-dow { font-size: 11px; font-weight: 600; color: var(--text-muted); }
+.mob-day-num { font-size: 18px; font-weight: 800; color: var(--primary); }
+.mob-day-btn.is-selected .mob-day-dow { color: rgba(255, 255, 255, 0.85); }
+.mob-day-btn.is-selected .mob-day-num { color: var(--on-accent); }
+
+.mob-list { flex: 1; overflow-y: auto; padding: 4px 16px 28px; }
+
+.mob-appt {
+  padding: 18px 0;
+  border-bottom: 1px solid var(--divider);
+}
+.mob-appt-head { display: flex; align-items: center; gap: 12px; }
+.mob-appt-time {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+  min-width: 44px;
+}
+.mob-appt-open {
+  flex: 1;
+  text-align: start;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+}
+.mob-appt-name { font-size: 17px; font-weight: 700; color: var(--primary); letter-spacing: -0.01em; }
+.mob-appt-kind { display: block; font-size: 12px; color: var(--text-muted); font-weight: 500; margin-top: 1px; }
+
+.mob-plus {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1.5px solid var(--primary-border);
+  background: var(--surface);
+  color: var(--primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+.mob-plus.is-open { background: var(--primary-tint); border-color: var(--primary); }
+
+.mob-actions { display: flex; justify-content: flex-start; gap: 10px; margin-top: 12px; }
+.mob-action-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  border: 1.5px solid var(--primary);
+  background: var(--surface);
+  color: var(--primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+}
+.mob-action-btn:hover { background: var(--primary-tint); }
+
+.mob-primary-btn {
+  display: block;
+  width: 100%;
+  margin-top: 14px;
+  padding: 15px;
+  border: none;
+  border-radius: 14px;
+  background: var(--primary);
+  color: var(--on-accent);
+  font-size: 16px;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+  letter-spacing: -0.01em;
+  box-shadow: 0 2px 8px rgba(16, 40, 80, 0.22);
+}
+.mob-primary-btn:hover { background: var(--primary-dark); }
+.mob-ghost-btn {
+  display: block;
+  width: 100%;
+  padding: 15px;
+  border: 1.5px solid var(--primary);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--primary);
+  font-size: 15px;
+  font-weight: 800;
+  font-family: inherit;
+  cursor: pointer;
+}
+.mob-ghost-btn:hover { background: var(--primary-tint); }
+
+.mob-empty { text-align: center; padding: 64px 20px; color: var(--text-muted); }
+.mob-empty-title { font-size: 15px; font-weight: 600; margin-top: 10px; }
+
+/* ---- bottom sheets ---- */
+.mob-sheet-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(10, 15, 40, 0.4);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  animation: fadeup 0.18s ease;
+}
+.mob-sheet {
+  background: var(--surface);
+  border-radius: 22px 22px 0 0;
+  padding: 20px 20px 30px;
+  animation: mob-sheet-up 0.22s ease;
+}
+@keyframes mob-sheet-up { from { transform: translateY(24px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.mob-sheet-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--primary-border);
+  margin: 0 auto 16px;
+}
+.mob-sheet-title { font-size: 16px; font-weight: 800; color: var(--primary); margin-bottom: 4px; }
+.mob-sheet-sub { font-size: 12.5px; color: var(--text-muted); margin-bottom: 12px; }
+.mob-sheet-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  height: 96px;
+  border: 1.5px solid var(--primary-border);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: 14px;
+  color: var(--text);
+  background: var(--surface);
+  resize: none;
+}
+.mob-attach-opt {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--divider);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--primary);
+  font-size: 14.5px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: start;
+  margin-bottom: 8px;
+}
+.mob-attach-opt:hover { border-color: var(--primary); background: var(--primary-surface); }
+
+/* ---- recording overlay ---- */
+.mob-record {
+  position: absolute;
+  inset: 0;
+  z-index: 70;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  padding: 24px;
+}
+.mob-record-time {
+  font-size: 44px;
+  font-weight: 800;
+  color: var(--primary);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.mob-wave { display: flex; align-items: center; gap: 4px; height: 44px; }
+.mob-wave-bar {
+  width: 4px;
+  border-radius: 2px;
+  background: var(--primary);
+  transform-origin: center;
+  animation: mob-wave 0.9s ease-in-out infinite;
+}
+.mob-wave.is-paused .mob-wave-bar { animation: none; opacity: 0.3; }
+@keyframes mob-wave { 0%, 100% { transform: scaleY(0.25); } 50% { transform: scaleY(1); } }
+.mob-record-btn {
+  border-radius: 50%;
+  border: 1.5px solid var(--primary);
+  background: var(--surface);
+  color: var(--primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: inherit;
+}
+.mob-record-stop {
+  width: 78px;
+  height: 78px;
+  border: none;
+  background: var(--primary);
+  color: var(--on-accent);
+  font-size: 15px;
+  font-weight: 800;
+}
+
+/* ---- screen scaffold (prep report / patient) ---- */
+.mob-screen { display: flex; flex-direction: column; height: 100%; }
+.mob-screen-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px 10px;
+  border-bottom: 1px solid var(--divider);
+}
+.mob-screen-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.mob-footer {
+  display: flex;
+  gap: 10px;
+  padding: 12px 16px 20px;
+  border-top: 1px solid var(--divider);
+}
+.mob-footer > * { flex: 1; }
+.mob-back {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid var(--primary-border);
+  background: var(--surface);
+  color: var(--primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-family: inherit;
+}
+.mob-back:hover { background: var(--primary-surface); }
+.mob-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--primary);
+  background: var(--primary-tint);
+  border-radius: 999px;
+  padding: 4px 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.mob-goal {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 4px 0;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: start;
+}
+.mob-check {
+  width: 20px;
+  height: 20px;
+  border-radius: 6px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 800;
+  border: 1.5px solid var(--primary-border);
+  background: var(--surface);
+  color: transparent;
+}
+.mob-check.is-done { background: var(--primary); border-color: var(--primary); color: var(--on-accent); }
+.mob-sess-row {
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  border-radius: 14px;
+  padding: 13px 15px;
+  cursor: pointer;
+  font-family: inherit;
+  width: 100%;
+  text-align: start;
+}
+.mob-sess-row:hover { border-color: var(--primary-border); }
+
+/* ---- cards (prep report / patient) ---- */
+.mob-card {
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  border-radius: 16px;
+  padding: 16px;
+}
+.mob-card-title { font-size: 13px; font-weight: 800; color: var(--primary); margin-bottom: 8px; }
+.mob-card-body { font-size: 14px; line-height: 1.65; color: var(--text-2); }

@@ -1,0 +1,14 @@
+/* Patient detail — hover/focus states ported from the prototype's style-hover/focus attrs. */
+.pd-crumb:hover { color: var(--primary); }
+.pd-next:hover { background: var(--primary-tint); }
+.pd-primary-btn:hover { background: var(--primary-dark); }
+.pd-ghost-btn:hover { border-color: var(--primary); color: var(--primary); }
+.pd-notes-ta:focus { border-color: var(--primary); }
+.pd-note-ta:focus { border-color: var(--primary); }
+.pd-sess-row:hover { background: var(--surface-2); }
+.pd-sess-act:hover { border-color: var(--primary); color: var(--primary); }
+.pd-sess-del:hover { border-color: var(--error); background: var(--error-bg); }
+.pd-note-view:hover { background: var(--primary-surface); }
+.pd-upcoming-row:hover { background: var(--surface-2); }
+.pd-history-link:hover { text-decoration: underline; }
+.pd-danger-btn:hover { border-color: var(--error) !important; color: var(--error) !important; background: var(--error-bg) !important; }

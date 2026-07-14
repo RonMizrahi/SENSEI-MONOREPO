@@ -1,0 +1,15 @@
+# Netlify deployment config. Headers (CSP, security, cache policy) live in
+# public/_headers — the single source of truth shared with any static host.
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# SPA fallback: the app is hash-routed (all deep links live on "/"), but a
+# direct visit to any path must still serve the shell, never a Netlify 404.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

@@ -1,0 +1,27 @@
+{
+  "name": "sensei-monorepo",
+  "version": "0.1.0",
+  "description": "Sensei — therapist practice management. Turborepo monorepo: NestJS API (apps/api) + React SPA (apps/web).",
+  "author": "Ron Mizrahi",
+  "private": true,
+  "license": "MIT",
+  "packageManager": "pnpm@11.11.0",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev start:dev --parallel",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:int": "turbo run test:int",
+    "e2e": "turbo run e2e",
+    "format": "prettier --write \"**/*.{ts,tsx,js,mjs,json,md,yaml,yml}\""
+  },
+  "devDependencies": {
+    "prettier": "^3.9.4",
+    "turbo": "^2.5.0",
+    "typescript": "^5.9.3"
+  }
+}

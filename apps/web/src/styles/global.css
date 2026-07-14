@@ -1,0 +1,39 @@
+/* Heebo — bundled variable font (full 100–900 weight range). Single type family
+   across the entire interface; hierarchy is carried by weight + size, not family. */
+@font-face {
+  font-family: 'Heebo';
+  src: url('/fonts/Heebo-VariableFont_wght.ttf') format('truetype');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Prevent phantom horizontal scroll from the off-canvas mobile nav drawer
+   (position:fixed; translateX(105%) sits beyond the viewport edge when closed).
+   Clipping the root scroller removes the phantom scroll; verified not to
+   affect the sticky app bar / sidebar (they scroll with the window). */
+html, body { overflow-x: hidden; }
+
+/* Shared component hover states (Pager) */
+.pager-size-btn:hover { filter: brightness(.97); }
+.pager-nav-btn:not(:disabled):hover { background: var(--surface-2) !important; }
+.pager-page-btn:hover { border-color: var(--primary-border) !important; }
+
+/* Skeleton shimmer utility — mirrors the prototype's inline skeleton treatment. */
+.skeleton {
+  background: linear-gradient(90deg, var(--skeleton-1) 25%, var(--skeleton-2) 37%, var(--skeleton-1) 63%);
+  background-size: 380px 100%;
+  animation: shimmer 1.4s ease infinite;
+}
+
+/* Print: the clinical letter's "Print" button (window.print) used to print the whole
+   app — sidebar, app bar, buttons and all. This isolates the document: hide every app
+   chrome + interactive control (or anything tagged .no-print) so a clean, professional
+   letter goes to paper / PDF. On-screen appearance is unaffected. */
+@media print {
+  .app-sidebar, .appbar, .nav-toggle, .nav-scrim, .shell-fab, .demo-pill,
+  .skip-link, [role='dialog'], [role='menu'], .no-print { display: none !important; }
+  html, body { background: var(--on-accent) !important; }
+  #main-content { padding: 0 !important; overflow: visible !important; }
+  #main-content * { box-shadow: none !important; }
+}

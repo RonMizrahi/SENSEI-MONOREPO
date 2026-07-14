@@ -1,0 +1,5 @@
+/* Upload screen — hover/focus states ported from style-hover attributes.
+   Every class is prefixed `upl-` and this file is imported by UploadPage only. */
+.upl-crumb:hover { color: var(--primary); }
+.upl-demo-link:hover { color: var(--text-secondary); }
+.upl-policy-link:hover { text-decoration: underline; }

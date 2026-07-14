@@ -1,0 +1,5 @@
+/* Clinical Letter — hover states ported from the prototype's style-hover attributes.
+   !important is required because the base declarations are inline (ported verbatim). */
+.lt-crumb:hover { color: var(--primary) !important; }
+.lt-outline-btn:hover { border-color: var(--primary) !important; color: var(--primary) !important; }
+.lt-primary-btn:hover { background: var(--primary-dark) !important; }

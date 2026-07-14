@@ -1,0 +1,28 @@
+/* Settings screen — hover/focus states ported from the prototype's
+   style-hover / style-focus attributes. The DC runtime applied these inline
+   (overriding base inline styles), hence the !important mirrors. */
+
+.set-tab:hover { background: var(--primary-surface) !important; }
+
+.set-input:focus { border-color: var(--primary) !important; }
+
+/* border + text turn primary on hover (upload photo, a11y reset) */
+.set-hov-primary:hover { border-color: var(--primary) !important; color: var(--primary) !important; }
+
+/* border + text turn error on hover (remove photo, sign out all) */
+.set-hov-danger:hover { border-color: var(--error) !important; color: var(--error) !important; }
+
+/* border turns primary on hover (radio cards, address buttons) */
+.set-hov-border:hover { border-color: var(--primary) !important; }
+
+/* discard-changes button */
+.set-hov-border-sec:hover { border-color: var(--text-secondary) !important; }
+
+/* profile quick links */
+.set-quick:hover { border-color: var(--primary) !important; background: var(--primary-surface) !important; }
+
+/* danger-zone wipe button */
+.set-wipe:hover { background: var(--error) !important; color: var(--paper) !important; }
+
+/* sync-now button */
+.set-syncnow:hover { background: var(--primary-tint) !important; }

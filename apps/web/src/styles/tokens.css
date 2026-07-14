@@ -1,0 +1,246 @@
+  /* ============================================================
+     SENSEI · single source of truth for color
+     Change a value here -> it updates everywhere in the app.
+     ============================================================ */
+  /* Blue-and-white brand palette — aligned with Sensei logo ink */
+  :root{
+    /* Primary brand: indigo-blue ink */
+    --primary:#1F63D6; --primary-dark:#1450B4; --primary-darker:#0E3C88; --primary-light:#6E9CE8;
+    --primary-tint:#E6EFFB; --primary-surface:#F1F6FD; --primary-border:#BFD5F2;
+    /* Brand accent-card gradient stops + constant on-accent text. In light mode the
+       stops equal the primary blues; in dark mode they darken (below) so the always-light
+       on-accent text stays AA-readable on them — a mid-tone gradient fails both light and
+       dark text otherwise. */
+    --accent-grad-1:var(--primary-darker); --accent-grad-2:var(--primary); --on-accent:#FFFFFF;
+    /* Secondary: azure blue — transcript patient + topics accent (brand blue family) */
+    --secondary:#2E6BA8; --secondary-strong:#2455A0; --secondary-bg:#E4EEF8; --secondary-border:#CBDCEF; --secondary-tint:#EEF5FB;
+    /* Semantic states — a single blue identity by design decision (2026-07-06):
+       severity is a DEPTH ladder within the blue family (error deepest, warning
+       mid, success lightest), and meaning is always carried by non-color signals
+       (icons, labels, badges, borders, microcopy) — never by hue alone. All
+       text-on-tint pairs computed >= 4.5:1 (see tests/contrast.test.ts). */
+    --info:#1E5AB8; --info-strong:#134A9E; --info-bg:#E5EEFA;
+    --success:#2F66B0; --success-bg:#E8F0FB; --success-border:#C0D5F1; --success-surface:#F0F6FD;
+    --warning:#24549E; --warning-strong:#1B4585; --warning-bg:#E2ECF9;
+    --error:#123A85; --error-dark:#0C2B66; --error-bg:#DCE7F8; --error-bg-soft:#E9F0FB; --error-border:#B7CBEE; --error-line:#D9E4F6; --error-text-soft:#46639B;
+    /* Surfaces: crisp blue-white */
+    --bg:#F3F7FD; --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#EAF1FB; --surface-3:#DEEAF8;
+    /* Skeleton shimmer: blue-tinted */
+    --skeleton-1:#D8E5F6; --skeleton-2:#EAF2FC;
+    /* Typography: blue-ink */
+    --text:#0C1B3B; --text-2:#1D3565; --text-secondary:#425574; --text-muted:#5F6C89; --text-disabled:#9AA9C6;
+    /* Lines & inputs */
+    --divider:#DBE6F4; --line:#EAF1FB; --border-input:#BFD1EC; --selection:#CCDEF6; --scroll:#9DB6DE; --toggle-off:#B7C9E6;
+    /* Sidebar: deep brand navy — matches logo ink family */
+    --ink:#0F3573; --ink-text:#E8EFFB; --ink-muted:#9DB2DD;
+    /* Calendar session categories — week-view event swatches (bg / bar / text).
+       Multi-hue by design for at-a-glance calendar readability; meaning is never
+       carried by hue alone (each event also shows its type label), and every
+       text-on-bg pair is AA-verified in both themes (see tests/contrast.test.ts). */
+    --cat-weekly-bg:#E6EFFB; --cat-weekly-bar:#1F63D6; --cat-weekly-text:#0E3C88;
+    --cat-followup-bg:#E4F3EC; --cat-followup-bar:#188038; --cat-followup-text:#0D5226;
+    --cat-intake-bg:#FCEBDD; --cat-intake-bar:#E8710A; --cat-intake-text:#A14A05;
+    --cat-video-bg:#E9E6F8; --cat-video-bar:#7A5EC8; --cat-video-text:#4B3A8C;
+    --cat-couples-bg:#FCE4EC; --cat-couples-bar:#C2185B; --cat-couples-text:#8E1244;
+    /* Calendar "current time" indicator — a thin line + dot on today's column.
+       Red by universal calendar convention; purely positional, carries no text. */
+    --now-line:#C0392B;
+    color-scheme:light;
+  }
+  /* ============================================================
+     DARK THEME · same token contract, inverted surfaces.
+     Toggled from the app bar; persisted per user. Every screen
+     reads these vars, so nothing else needs to change.
+     ============================================================ */
+  [data-theme="dark"]{
+    color-scheme:dark;
+    --primary:#4D94F5; --primary-dark:#3D82E6; --primary-darker:#3370CC; --primary-light:#7FB2F8;
+    --primary-tint:#152B4E; --primary-surface:#11223C; --primary-border:#2E4C78;
+    /* Darker accent-gradient stops for dark mode so always-white on-accent text stays AA
+       (the primary blues above are too light for white text on a card). */
+    --accent-grad-1:#0A2547; --accent-grad-2:#14417D;
+    --secondary:#6FA0D6; --secondary-strong:#84B0E0; --secondary-bg:#182739; --secondary-border:#2C3F55; --secondary-tint:#152233;
+    /* Semantic states, dark: same blue-only ladder — severity by LIGHTNESS
+       (error lightest/most prominent on its deep-navy tint). */
+    --info:#6FA6F0; --info-strong:#8CBBF5; --info-bg:#132A4C;
+    --success:#7AA6E8; --success-bg:#10223F; --success-border:#27436F; --success-surface:#0F1F3A;
+    --warning:#8FB3EF; --warning-strong:#A3C1F3; --warning-bg:#12264A;
+    --error:#A9C7F7; --error-dark:#BFD5FA; --error-bg:#142A52; --error-bg-soft:#112344; --error-border:#2C4A7E; --error-line:#1D3560; --error-text-soft:#93B4E8;
+    --bg:#0A1426; --paper:#122038; --surface:#122038; --surface-2:#1A2E4C; --surface-3:#24395E;
+    --skeleton-1:#1A2E4C; --skeleton-2:#24395E;
+    --text:#E9F0FB; --text-2:#BFD3F0; --text-secondary:#94A9CE; --text-muted:#8496BA; --text-disabled:#566A8E;
+    --divider:#213655; --line:#1B2F4E; --border-input:#33517C; --selection:#33517C; --scroll:#33517C; --toggle-off:#33517C;
+    --ink:#08152C; --ink-text:#E8EFFB; --ink-muted:#7C93C4;
+    /* Session categories, dark: deep-tinted surfaces + lightened bar/text (AA-verified). */
+    --cat-weekly-bg:#152B4E; --cat-weekly-bar:#4D94F5; --cat-weekly-text:#BFD3F0;
+    --cat-followup-bg:#10261A; --cat-followup-bar:#4CAF6E; --cat-followup-text:#A8E0BC;
+    --cat-intake-bg:#2E1E10; --cat-intake-bar:#E8963C; --cat-intake-text:#F0C9A0;
+    --cat-video-bg:#201A38; --cat-video-bar:#A78BE0; --cat-video-text:#D3C7F0;
+    --cat-couples-bg:#2E1420; --cat-couples-bar:#E06A97; --cat-couples-text:#F5C2D6;
+    --now-line:#E5675B;
+  }
+  html,body,[data-theme]{transition:background-color .28s ease,border-color .28s ease,color .2s ease}
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{font-family:'Heebo',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+  h1,h2,h3{font-family:'Heebo',system-ui,sans-serif;font-weight:800;letter-spacing:0}
+  ::selection{background:var(--selection)}
+  /* Placeholders: use the muted token (AA-contrast in both themes) instead of the
+     browser default (#757575 ≈ 4.05:1). opacity:1 stops Firefox dimming it further. */
+  ::placeholder{color:var(--text-muted);opacity:1}
+  input,button,select,textarea{font-family:inherit}
+  /* Pin data-entry text to the design token (both themes) instead of leaving it to the
+     browser's color-scheme default. Guarantees user-entered text, the caret and the
+     selected value always use --text (AA on the input surface) rather than a UA-chosen
+     colour. Buttons are excluded — they own their own on-accent text colour. */
+  input,textarea,select{color:var(--text)}
+  /* Global interaction polish — smooth every inline hover/focus state across all screens */
+  a,button,select,summary,[role="button"],[role="checkbox"],[role="menuitem"],tr,th,td,li,label{transition:background-color .16s ease,border-color .16s ease,box-shadow .18s ease,color .14s ease,opacity .16s ease}
+  input,textarea{transition:border-color .16s ease,background-color .16s ease,box-shadow .18s ease}
+  button:not(:disabled),a[role="button"],[role="button"]{transition:background-color .16s ease,border-color .16s ease,box-shadow .18s ease,color .14s ease,transform .08s ease}
+  button:not(:disabled):active{transform:translateY(1px)}
+  ::-webkit-scrollbar{width:10px;height:10px}
+  ::-webkit-scrollbar-thumb{background:var(--scroll);border-radius:8px;border:2px solid var(--bg)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes shimmer{0%{background-position:380px 0}100%{background-position:-380px 0}}
+  @keyframes fadeup{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @keyframes pop{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:none}}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  @keyframes loadbar{0%{right:100%}100%{right:-60%}}
+  @keyframes snackin{from{opacity:0;transform:translate(-50%,16px)}to{opacity:1;transform:translate(-50%,0)}}
+  @keyframes contentin{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  /* Screen-to-screen entrance: each freshly-mounted route root gently fades + rises,
+     giving a clear "you moved" signal without shifting layout. Neutralized by the
+     reduced-motion rule below and by the manual motion-reduction preference. */
+  #main-content > div:last-child{animation:contentin .28s cubic-bezier(.22,.61,.36,1)}
+  *:focus-visible{outline:2px solid var(--primary) !important;outline-offset:2px;border-radius:6px}
+  @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms !important;transition-duration:.001ms !important}}
+  /* ============================================================
+     Accessibility preferences — user-controlled, persisted.
+     Applied via data-attributes on <html> by _applyA11y().
+     ============================================================ */
+  /* Reduce motion (manual, independent of the OS media query above) */
+  html[data-a11y-motion="reduce"] *,
+  html[data-a11y-motion="reduce"] *::before,
+  html[data-a11y-motion="reduce"] *::after{
+    animation-duration:.001ms !important;animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;transition-delay:0s !important;scroll-behavior:auto !important;
+  }
+  /* Stronger, always-visible focus ring */
+  html[data-a11y-focus="strong"] a:focus-visible,
+  html[data-a11y-focus="strong"] button:focus-visible,
+  html[data-a11y-focus="strong"] input:focus-visible,
+  html[data-a11y-focus="strong"] select:focus-visible,
+  html[data-a11y-focus="strong"] textarea:focus-visible,
+  html[data-a11y-focus="strong"] [tabindex]:focus-visible,
+  html[data-a11y-focus="strong"] [role="button"]:focus-visible,
+  html[data-a11y-focus="strong"] [role="switch"]:focus-visible,
+  html[data-a11y-focus="strong"] [role="radio"]:focus-visible,
+  html[data-a11y-focus="strong"] [role="checkbox"]:focus-visible{
+    outline:3px solid var(--primary) !important;outline-offset:3px !important;
+    box-shadow:0 0 0 3px var(--paper),0 0 0 6px var(--primary) !important;border-radius:8px;
+  }
+  /* Reading — spacious line & letter spacing for body copy */
+  html[data-a11y-reading="spacious"] p,
+  html[data-a11y-reading="spacious"] li,
+  html[data-a11y-reading="spacious"] td,
+  html[data-a11y-reading="spacious"] label{line-height:1.9 !important;letter-spacing:.012em}
+  /* Reading — underline every link */
+  html[data-a11y-underline="on"] a{text-decoration:underline !important;text-underline-offset:2px}
+  /* High contrast — reinforce text/border tokens (light) */
+  html[data-a11y-contrast="high"]{
+    --text:#000000; --text-2:#0A1B3B; --text-secondary:#182A4C; --text-muted:#2C3A56;
+    --divider:#4E5E7B; --line:#4E5E7B; --border-input:#3A4A66; --text-disabled:#4C5A76;
+  }
+  html[data-a11y-contrast="high"][data-theme="dark"]{
+    --text:#FFFFFF; --text-2:#EDF3FE; --text-secondary:#D5E1F4; --text-muted:#BECDE6;
+    --divider:#8298BE; --line:#8298BE; --border-input:#94A9CE; --text-disabled:#A6B6D2;
+  }
+  html[data-a11y-contrast="high"] *:focus-visible{outline-width:3px !important}
+  /* Skip-to-content link — first tab stop, hidden until focused */
+  .skip-link{position:fixed;top:-64px;inset-inline-start:16px;z-index:400;background:var(--primary);color:var(--paper);padding:11px 20px;border-radius:0 0 12px 12px;font-weight:700;font-size:14px;text-decoration:none;box-shadow:0 8px 24px rgba(16,40,80,.3);transition:top .18s cubic-bezier(.4,0,.2,1)}
+  .skip-link:focus,.skip-link:focus-visible{top:0;outline:3px solid #fff;outline-offset:-4px}
+  /* ---- responsive shell: sidebar becomes an off-canvas drawer on narrow viewports ---- */
+  .nav-toggle{display:none}
+  .nav-scrim{display:none}
+  @media (max-width:860px){
+    /* Off-canvas drawer. `visibility:hidden` when closed removes the 14 nav links from
+       the tab order and the accessibility tree — otherwise a keyboard user tabs into
+       invisible off-screen controls and a screen reader announces the whole hidden menu
+       (WCAG 2.4.3). The `visibility 0s linear .26s` delay keeps it visible through the
+       slide-out animation, then hides it; opening makes it visible immediately. */
+    .app-sidebar{position:fixed !important;top:0;bottom:0;right:0;height:100vh !important;z-index:200;transform:translateX(105%);visibility:hidden;transition:transform .26s cubic-bezier(.4,0,.2,1),visibility 0s linear .26s;box-shadow:-10px 0 40px rgba(8,20,50,.3)}
+    .app-sidebar.open{transform:translateX(0);visibility:visible;transition:transform .26s cubic-bezier(.4,0,.2,1),visibility 0s}
+    .nav-toggle{display:flex !important}
+    .nav-scrim{display:block}
+    .appbar-cta .cta-label{display:none}
+    .demo-pill-label{display:none}
+    .demo-pill{padding:0 6px !important}
+    .appbar-cta{padding:0 12px !important}
+    .appbar{padding:0 16px !important;gap:10px !important}
+  }
+  @media (max-width:560px){
+    /* On phones the appbar is tight. The desktop flex:1 spacer is pure
+       whitespace that competes with the search for leftover space, and the
+       search's 190px min-width pushed the notifications + account buttons off
+       the trailing edge (clipped, unreachable ≤~400px). Collapse the spacer and
+       drop the search min so every control stays on-screen and the search stays
+       usable. */
+    .appbar-spacer{display:none !important}
+    /* App-bar dropdowns (notifications) anchor to their small, off-centre
+       triggers; on phones, pin them to the viewport with symmetric insets. */
+    .appbar-popover-panel{position:fixed !important;left:16px !important;right:16px !important;top:60px !important;min-width:0 !important;max-width:none !important;width:auto !important}
+    .appbar-hide-sm{display:none !important}
+  }
+  /* ---- responsive content grids: media-query overrides only, desktop keeps its inline layout ---- */
+  @media (max-width:1024px){
+    .rx-kpi4{grid-template-columns:repeat(2,1fr) !important}
+    .rx-main{grid-template-columns:1fr !important}
+    .rx-side{grid-template-columns:1fr !important}
+  }
+  @media (max-width:680px){
+    .rx-kpi3{grid-template-columns:1fr !important}
+    .rx-onboard{grid-template-columns:repeat(2,1fr) !important}
+  }
+  @media (max-width:480px){
+    .rx-kpi4{grid-template-columns:1fr !important}
+    .rx-onboard{grid-template-columns:1fr !important}
+  }
+  @media (max-width:860px){
+    .rx-msg{grid-template-columns:1fr !important;height:auto !important}
+  }
+  @media (max-width:640px){
+    .rx-2to1{grid-template-columns:1fr !important}
+  }
+  /* ---- responsive typography: down-scale oversized display sizes on small screens ----
+     Inline font-size values are overridden here via [style*=] with !important, so the
+     desktop layout keeps its literals and only phones/tablets get the tighter scale.
+     (An !important stylesheet rule beats a non-important inline style.) */
+  @media (max-width:640px){
+    /* page-header titles (h1 at 26–28px) — selectors use the space-after-colon form
+       the browser serializes inline styles into (React style objects re-serialize as
+       'font-size: 28px'); the no-space form matched nothing. */
+    [style*="font-size: 28px"]{font-size:24px !important}
+    [style*="font-size: 27px"]{font-size:23px !important}
+    [style*="font-size: 26px"]{font-size:23px !important}
+    /* big KPI / stat numbers */
+    [style*="font-size: 34px"]{font-size:27px !important}
+    [style*="font-size: 30px"]{font-size:25px !important}
+    /* profile / section sub-heads */
+    [style*="font-size: 24px"]{font-size:21px !important}
+    [style*="font-size: 23px"]{font-size:21px !important}
+    [style*="font-size: 22px"]{font-size:20px !important}
+    /* un-classed two-column content grids collapse to one column (AI-summary
+       topics/patterns, report, dedup cards, help, analytics charts). The trailing ';'
+       keeps three-column 'repeat(3,1fr)' / '1fr 1fr 1fr' grids unaffected. */
+    [style*="grid-template-columns: 1fr 1fr;"]{grid-template-columns:1fr !important}
+    [style*="grid-template-columns: 1.5fr 1fr"]{grid-template-columns:1fr !important}
+    [style*="grid-template-columns: 2fr 1fr"]{grid-template-columns:1fr !important}
+  }
+  @media (max-width:400px){
+    [style*="font-size: 28px"]{font-size:22px !important}
+    [style*="font-size: 27px"]{font-size:21px !important}
+    [style*="font-size: 26px"]{font-size:21px !important}
+    [style*="font-size: 34px"]{font-size:25px !important}
+    [style*="font-size: 30px"]{font-size:23px !important}
+  }

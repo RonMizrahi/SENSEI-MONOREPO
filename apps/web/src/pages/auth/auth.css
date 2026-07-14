@@ -1,0 +1,31 @@
+/* Auth screens — hover/focus styles ported from the prototype's
+   style-focus / style-hover attributes (template lines 256–381). */
+
+/* all auth inputs: style-focus="border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-tint)" */
+.auth-input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-tint);
+}
+
+/* password visibility toggle: style-hover="background:var(--surface-2);color:var(--text-2)" */
+.auth-eye:hover {
+  background: var(--surface-2);
+  color: var(--text-2);
+}
+
+/* login submit: style-hover="background:var(--primary-dark);box-shadow:0 6px 18px rgba(31,99,214,.42)" */
+.auth-login-btn:hover:not(:disabled) {
+  background: var(--primary-dark);
+  box-shadow: 0 6px 18px rgba(31, 99, 214, .42);
+}
+
+/* demo-mode button: style-hover="background:var(--primary-tint);border-color:var(--primary)" */
+.auth-demo-btn:hover {
+  background: var(--primary-tint);
+  border-color: var(--primary);
+}
+
+/* signup submit: style-hover="background:var(--primary-dark)" */
+.auth-signup-btn:hover {
+  background: var(--primary-dark);
+}

@@ -1,0 +1,13 @@
+/* Calendar screen — hover/focus states ported from style-hover attributes in
+   'Sensei demo.dc.html' (template lines 1568–1684).
+   !important is required to win over the ported inline declarations. */
+.cal-refresh-btn:hover { border-color: var(--primary) !important; }
+.cal-new-btn:hover { background: var(--primary-dark) !important; }
+.cal-retry-btn:hover { background: var(--primary-dark) !important; }
+.cal-empty-refresh:hover { border-color: var(--primary) !important; }
+.cal-empty-new:hover { background: var(--primary-dark) !important; }
+.cal-day-cell:hover { border-color: var(--primary) !important; }
+.cal-agenda-row:hover { background: var(--surface-2) !important; }
+.cal-week-nav:hover { border-color: var(--primary) !important; color: var(--primary) !important; }
+.cal-today-btn:hover { border-color: var(--primary) !important; color: var(--primary) !important; }
+.cal-date-input:focus { border-color: var(--primary) !important; outline: none; }

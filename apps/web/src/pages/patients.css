@@ -1,0 +1,6 @@
+/* Patients screen — hover/focus states ported from the prototype's style-hover attrs. */
+.pat-new-btn:hover { background: var(--primary-dark); }
+.pat-row:hover { background: var(--surface-2); }
+.pat-icon-btn:hover { border-color: var(--primary); color: var(--primary); }
+.pat-archive-btn:hover { border-color: var(--text-secondary); color: var(--text-2); background: var(--surface-2); }
+.pat-del-btn:hover { border-color: var(--error); background: var(--error-bg); }

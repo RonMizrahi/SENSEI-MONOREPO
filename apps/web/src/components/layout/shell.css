@@ -1,0 +1,32 @@
+/* Shell hover/focus styles — ported from the prototype's style-hover / style-focus
+   attributes. Class names are prefixed `shell-` (co-located; imported by AppShell only). */
+
+/* sidebar */
+.shell-nav-link:hover { background: rgba(255, 255, 255, 0.07) !important; }
+.shell-logout:hover, .shell-logout:focus-visible { fill: var(--paper); }
+
+/* appbar */
+.shell-row-hover:hover { background: var(--surface-2) !important; }
+.shell-cta:hover { background: var(--primary-dark) !important; }
+.shell-iconbtn:hover { background: var(--surface-2); }
+.shell-demo-x:hover { background: rgba(120, 70, 0, 0.24) !important; }
+.shell-avatar-btn:hover { filter: brightness(1.08); }
+
+/* overlays (palette, dialogs, ai) */
+.shell-close-x:hover { fill: var(--text); }
+.shell-input:focus { border-color: var(--primary) !important; }
+.shell-ai-chip:hover { background: var(--primary-tint) !important; }
+.shell-send:hover { background: var(--primary-dark) !important; }
+.shell-fab:hover {
+  box-shadow: 0 14px 34px rgba(31, 99, 214, 0.52) !important;
+  transform: translateY(-1px);
+}
+
+/* dialogs */
+.shell-notes-add:hover { border-color: var(--primary) !important; color: var(--primary) !important; }
+.shell-danger-btn:hover { background: var(--error-bg) !important; }
+.shell-primary-btn:hover { background: var(--primary-dark) !important; }
+
+/* snackbar */
+.shell-toast-action:hover { background: var(--surface-3) !important; }
+.shell-toast-x:hover { fill: var(--text); }

@@ -1,0 +1,81 @@
+// Mobile experience — below 768px the app renders the dedicated mobile shell
+// (MobileApp) with the touch-first day view instead of the desktop AppShell.
+// matchMedia is mocked to activate the mobile branch (useIsMobile). The day view
+// reads the same client-only fixture as the calendar; Monday of the current week
+// always has fixture events, so selection + expand + sheets are deterministic.
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
+import { AppStoreProvider } from '../src/store/AppStore';
+import App from '../src/App';
+import { MOBILE_QUERY } from '../src/hooks/useIsMobile';
+
+const PKEY = 'sensei_session_react_v1';
+
+function setMobile(on: boolean) {
+  window.matchMedia = ((q: string) => ({
+    matches: on && q === MOBILE_QUERY,
+    media: q,
+    addEventListener: () => {}, removeEventListener: () => {},
+    addListener: () => {}, removeListener: () => {}, dispatchEvent: () => false,
+  })) as any;
+}
+
+function mount() {
+  localStorage.setItem(PKEY, JSON.stringify({ __savedAt: Date.now(), view: 'app', route: 'dashboard' }));
+  return render(<AppStoreProvider><App /></AppStoreProvider>);
+}
+
+beforeEach(() => setMobile(true));
+afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
+
+/** Select Monday (strip index 1 — Sunday is 0) which always carries fixture events. */
+async function selectMondayWithAppts(container: HTMLElement) {
+  await waitFor(() => expect(container.querySelectorAll('.mob-day-btn').length).toBe(14));
+  const monday = container.querySelectorAll('.mob-day-btn')[1] as HTMLElement;
+  act(() => { fireEvent.click(monday); });
+  await waitFor(() => expect(container.querySelectorAll('.mob-appt').length).toBeGreaterThan(0), { timeout: 3000 });
+}
+
+describe('mobile day view', () => {
+  it('renders the mobile shell + day view (not the desktop AppShell)', async () => {
+    const { container } = mount();
+    await waitFor(() => expect(container.querySelector('.mob-shell')).toBeTruthy());
+    expect(container.querySelector('.mob-daystrip')).toBeTruthy();
+    // the desktop main region is not used on mobile shell (it has its own)
+    expect(container.querySelector('.mob-content')).toBeTruthy();
+  });
+
+  it('the menu button opens the sidebar drawer', async () => {
+    const { container } = mount();
+    await waitFor(() => expect(container.querySelector('.mob-iconbtn')).toBeTruthy());
+    expect(container.querySelector('.app-sidebar')?.classList.contains('open')).toBe(false);
+    fireEvent.click(container.querySelector('.mob-iconbtn') as HTMLElement);
+    await waitFor(() => expect(container.querySelector('.app-sidebar')?.classList.contains('open')).toBe(true));
+  });
+
+  it('expands an appointment to reveal quick actions', async () => {
+    const { container } = mount();
+    await selectMondayWithAppts(container);
+    expect(container.querySelector('.mob-actions')).toBeFalsy();
+    fireEvent.click(container.querySelector('.mob-plus') as HTMLElement);
+    await waitFor(() => expect(container.querySelector('.mob-actions')).toBeTruthy());
+    // three actions: insight, attach, record
+    expect(container.querySelectorAll('.mob-actions .mob-action-btn').length).toBe(3);
+  });
+
+  it('opens the insight sheet and confirms a save via a toast', async () => {
+    const { container } = mount();
+    await selectMondayWithAppts(container);
+    fireEvent.click(container.querySelector('.mob-plus') as HTMLElement);
+    await waitFor(() => expect(container.querySelector('.mob-actions')).toBeTruthy());
+    const insightBtn = [...container.querySelectorAll('.mob-action-btn')]
+      .find((b) => /תובנה מהירה/.test(b.getAttribute('aria-label') || '')) as HTMLElement;
+    fireEvent.click(insightBtn);
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeTruthy());
+    const ta = document.querySelector('.mob-sheet-textarea') as HTMLTextAreaElement;
+    fireEvent.change(ta, { target: { value: 'שיפור ניכר בשינה' } });
+    fireEvent.click([...document.querySelectorAll('button')].find((b) => b.textContent === 'שמירת תובנה') as HTMLElement);
+    await waitFor(() => expect(document.querySelector('[role="dialog"]')).toBeFalsy());
+    await waitFor(() => expect(document.body.textContent).toContain('התובנה נשמרה'));
+  });
+});

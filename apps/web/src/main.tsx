@@ -1,0 +1,14 @@
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './styles/tokens.css';
+import './styles/global.css';
+import { AppStoreProvider } from './store/AppStore';
+import App from './App';
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <AppStoreProvider>
+      <App />
+    </AppStoreProvider>
+  </React.StrictMode>,
+);

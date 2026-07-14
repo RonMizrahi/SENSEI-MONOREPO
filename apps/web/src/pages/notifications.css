@@ -1,0 +1,6 @@
+/* Notification center — hover states ported from the prototype's style-hover. */
+.notif-hdr-btn:hover { background: var(--surface-2) !important; border-color: var(--primary-border) !important; }
+.notif-group-mark:hover { opacity: .75; }
+.notif-row:hover { background: var(--surface-2) !important; }
+.notif-icon-btn:hover { background: var(--surface-2) !important; }
+.notif-arch-btn:hover { background: var(--error-bg) !important; }

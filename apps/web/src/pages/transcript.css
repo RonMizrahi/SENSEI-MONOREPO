@@ -1,0 +1,5 @@
+/* Transcript screen — hover/focus states ported from style-hover / style-focus.
+   Every class is prefixed `trs-` and this file is imported by TranscriptPage only. */
+.trs-crumb:hover { color: var(--primary); }
+.trs-copy-btn:hover { border-color: var(--primary); color: var(--primary); }
+.trs-search:focus { border-color: var(--primary); }

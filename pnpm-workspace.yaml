@@ -1,0 +1,19 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Settings moved here from package.json's "pnpm" field (pnpm 11+).
+overrides:
+  multer: ^2.2.0
+
+# Approve build scripts for native/functional deps (npm ran these previously).
+# argon2 = password hashing; ssh2/cpu-features = Testcontainers (Docker) native deps;
+# unrs-resolver = eslint import resolver; @scarf analytics disabled.
+allowBuilds:
+  esbuild: true
+  protobufjs: true
+  argon2: true
+  cpu-features: true
+  ssh2: true
+  unrs-resolver: true
+  "@scarf/scarf": false

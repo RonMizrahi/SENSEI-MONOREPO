@@ -1,0 +1,19 @@
+node_modules
+dist
+.DS_Store
+coverage
+.jscpd-report*
+
+# Local env — never commit real values. Only .env.example (safe template) is tracked.
+.env
+.env.*
+!.env.example
+.vite
+*.log
+
+# Release archives produced by `npm run package` (git archive)
+*.zip
+
+# Local Netlify folder
+.netlify
+.vercel
