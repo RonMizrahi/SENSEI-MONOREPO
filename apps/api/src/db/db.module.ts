@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { isMockMode } from '../common/mock-mode';
 import type { Env } from '../config/env.schema';
+import { MigrationRunnerService } from './migration-runner.service';
 
 /**
  * Database wiring — TypeORM against DATABASE_URL, or nothing in MOCK_MODE.
@@ -30,6 +31,7 @@ export class DbModule {
           }),
         }),
       ],
+      providers: [MigrationRunnerService],
     };
   }
 }
