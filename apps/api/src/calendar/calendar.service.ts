@@ -103,6 +103,16 @@ export function resolveListWindow(
   return { fromAt: from.toJSDate(), toAtExclusive: to.plus({ days: 1 }).toJSDate() };
 }
 
+/**
+ * Rejects an inverted interval (end on or before start).
+ * @throws BadRequestException when `end <= start`.
+ */
+export function assertOrderedInterval(start: Date, end: Date): void {
+  if (end.getTime() <= start.getTime()) {
+    throw new BadRequestException('end_at must be after start_at');
+  }
+}
+
 /** Renders a stored (UTC) event with ISO times carrying the zone's offset. */
 export function toResponseDto(event: CalendarEvent, zone: string): CalendarEventResponseDto {
   const inZone = (value: Date): string => {
@@ -142,11 +152,14 @@ export class CalendarService {
     dto: CreateCalendarEventDto,
   ): Promise<CalendarEventResponseDto> {
     const zone = resolveTimeZone(timeZone);
+    const startAt = parseInstant(dto.start_at, zone, 'start_at');
+    const endAt = parseInstant(dto.end_at, zone, 'end_at');
+    assertOrderedInterval(startAt, endAt);
     const event = await this.calendarRepository.create({
       title: dto.title,
       description: dto.description ?? null,
-      startAt: parseInstant(dto.start_at, zone, 'start_at'),
-      endAt: parseInstant(dto.end_at, zone, 'end_at'),
+      startAt,
+      endAt,
       therapistId: user.userId,
       patientId: dto.patient_id ?? null,
     });
@@ -204,6 +217,13 @@ export class CalendarService {
     if (dto.patient_id !== undefined) updates.patientId = dto.patient_id;
     if (Object.keys(updates).length === 0) {
       throw new BadRequestException('at least one event field must be provided');
+    }
+    if (updates.startAt !== undefined || updates.endAt !== undefined) {
+      const current = await this.calendarRepository.findById(user.userId, id);
+      if (!current) {
+        throw new ResourceNotFoundException(CALENDAR_EVENT_RESOURCE, id);
+      }
+      assertOrderedInterval(updates.startAt ?? current.startAt, updates.endAt ?? current.endAt);
     }
     const event = await this.calendarRepository.update(user.userId, id, updates);
     if (!event) {

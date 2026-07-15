@@ -1,10 +1,23 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
+import { PatientHasLinkedEventsException } from '../common/exceptions/app.exception';
 import { Patient } from './entities/patient.entity';
 
 /** DI token consumers use to obtain the patients repository (real or mock). */
 export const PATIENTS_REPOSITORY = Symbol('PATIENTS_REPOSITORY');
+
+/** PostgreSQL error code for foreign-key-constraint violations. */
+const PG_FOREIGN_KEY_VIOLATION = '23503';
+
+/**
+ * True when the error is a Postgres foreign-key-constraint violation.
+ * @param error Anything thrown by a TypeORM query.
+ */
+export function isForeignKeyViolation(error: unknown): boolean {
+  if (!(error instanceof QueryFailedError)) return false;
+  return Reflect.get(error.driverError, 'code') === PG_FOREIGN_KEY_VIOLATION;
+}
 
 /** Fields persisted when creating a patient. */
 export interface CreatePatientFields {
@@ -80,9 +93,15 @@ export class PatientsRepository implements PatientsRepositoryContract {
   /**
    * Deletes a patient by id.
    * @returns true when a row was removed, false when the id is unknown.
+   * @throws PatientHasLinkedEventsException (409) when calendar events still reference the patient.
    */
   async delete(id: string): Promise<boolean> {
-    const result = await this.repository.delete({ id });
-    return (result.affected ?? 0) > 0;
+    try {
+      const result = await this.repository.delete({ id });
+      return (result.affected ?? 0) > 0;
+    } catch (error) {
+      if (isForeignKeyViolation(error)) throw new PatientHasLinkedEventsException();
+      throw error;
+    }
   }
 }

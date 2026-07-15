@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
+import { PatientHasLinkedEventsException } from '../common/exceptions/app.exception';
 import { Patient } from './entities/patient.entity';
 import { definedPatientFields, PatientsRepository } from './patients.repository';
 
@@ -98,5 +99,27 @@ describe('PatientsRepository', () => {
 
     typeormRepository.delete.mockResolvedValue({ affected: 0, raw: {} });
     await expect(repository.delete(randomUUID())).resolves.toBe(false);
+  });
+
+  it('delete translates a Postgres 23503 FK violation to a 409 conflict', async () => {
+    const fkViolation = new QueryFailedError(
+      'DELETE',
+      [],
+      Object.assign(new Error('fk'), { code: '23503' }),
+    );
+    typeormRepository.delete.mockRejectedValue(fkViolation);
+    await expect(repository.delete(randomUUID())).rejects.toBeInstanceOf(
+      PatientHasLinkedEventsException,
+    );
+  });
+
+  it('delete rethrows non-FK query failures unchanged', async () => {
+    const otherError = new QueryFailedError(
+      'DELETE',
+      [],
+      Object.assign(new Error('other'), { code: '23505' }),
+    );
+    typeormRepository.delete.mockRejectedValue(otherError);
+    await expect(repository.delete(randomUUID())).rejects.toBe(otherError);
   });
 });

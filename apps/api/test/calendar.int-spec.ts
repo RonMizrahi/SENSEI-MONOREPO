@@ -147,6 +147,14 @@ describe('calendar (integration)', () => {
         .send({ title: 'x', start_at: '2026-08-10T10:00:00', end_at: '2026-08-10T10:50:00' })
         .expect(400);
     });
+
+    it('rejects an inverted interval (end_at before start_at) with 400', async () => {
+      await request(testApp.httpServer)
+        .post('/calendar')
+        .set('Authorization', `Bearer ${therapistA.token}`)
+        .send({ title: 'הפוך', start_at: '2026-08-10T10:50:00', end_at: '2026-08-10T10:00:00' })
+        .expect(400);
+    });
   });
 
   describe('GET /calendar', () => {
@@ -234,11 +242,11 @@ describe('calendar (integration)', () => {
       const response = await request(testApp.httpServer)
         .patch(`/calendar/${created.id}?time_zone=${IL}`)
         .set('Authorization', `Bearer ${therapistA.token}`)
-        .send({ title: 'עודכן', start_at: '2026-08-10T11:00:00' })
+        .send({ title: 'עודכן', start_at: '2026-08-10T10:20:00' })
         .expect(200);
       const updated = eventSchema.parse(response.body);
       expect(updated.title).toBe('עודכן');
-      expect(updated.start_at).toBe('2026-08-10T11:00:00.000+03:00');
+      expect(updated.start_at).toBe('2026-08-10T10:20:00.000+03:00');
       expect(updated.end_at).toBe(created.end_at);
     });
 
@@ -248,6 +256,16 @@ describe('calendar (integration)', () => {
         .patch(`/calendar/${created.id}`)
         .set('Authorization', `Bearer ${therapistA.token}`)
         .send({})
+        .expect(400);
+    });
+
+    it('rejects an inverted interval against the stored bound with 400', async () => {
+      // stored 10:00–10:50; moving end_at before the stored start inverts it
+      const created = await createEvent(therapistA);
+      await request(testApp.httpServer)
+        .patch(`/calendar/${created.id}?time_zone=${IL}`)
+        .set('Authorization', `Bearer ${therapistA.token}`)
+        .send({ end_at: '2026-08-10T09:00:00' })
         .expect(400);
     });
 

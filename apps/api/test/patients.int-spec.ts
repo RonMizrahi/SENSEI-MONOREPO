@@ -257,6 +257,25 @@ describe('patients (integration)', () => {
         .expect(404);
     });
 
+    it('409 when a calendar event still references the patient', async () => {
+      const patient = await createPatient(randomCreateBody());
+      await request(testApp.httpServer)
+        .post('/calendar')
+        .set(...auth(token))
+        .send({
+          title: 'פגישה מקושרת',
+          start_at: '2026-08-10T10:00:00',
+          end_at: '2026-08-10T10:50:00',
+          patient_id: patient.id,
+        })
+        .expect(201);
+
+      await request(testApp.httpServer)
+        .delete(`/patients/${patient.id}`)
+        .set(...auth(token))
+        .expect(409);
+    });
+
     it('404 on an unknown uuid', async () => {
       await request(testApp.httpServer)
         .delete(`/patients/${randomUUID()}`)

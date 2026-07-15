@@ -6,6 +6,7 @@ import type { AuthenticatedUser } from '../common/decorators/current-user.decora
 import { ResourceNotFoundException } from '../common/exceptions/app.exception';
 import type { CalendarRepository } from './calendar.repository';
 import {
+  assertOrderedInterval,
   CalendarService,
   parseInstant,
   resolveListWindow,
@@ -165,6 +166,25 @@ describe('resolveListWindow', () => {
   });
 });
 
+describe('assertOrderedInterval', () => {
+  it('accepts a strictly ordered interval', () => {
+    expect(() =>
+      assertOrderedInterval(new Date('2026-07-15T10:00:00Z'), new Date('2026-07-15T10:50:00Z')),
+    ).not.toThrow();
+  });
+
+  it('rejects an inverted interval with 400', () => {
+    expect(() =>
+      assertOrderedInterval(new Date('2026-07-15T10:50:00Z'), new Date('2026-07-15T10:00:00Z')),
+    ).toThrow(BadRequestException);
+  });
+
+  it('rejects a zero-length interval (end equals start) with 400', () => {
+    const instant = new Date('2026-07-15T10:00:00Z');
+    expect(() => assertOrderedInterval(instant, new Date(instant))).toThrow(BadRequestException);
+  });
+});
+
 describe('toResponseDto', () => {
   it('renders snake_case fields with the zone offset', () => {
     const event = makeEvent({ description: 'תיאור', patientId: randomUUID() });
@@ -240,6 +260,17 @@ describe('CalendarService', () => {
       ).rejects.toThrow(BadRequestException);
       expect(repository.create).not.toHaveBeenCalled();
     });
+
+    it('rejects an inverted interval (end before start) with 400', async () => {
+      await expect(
+        service.create(user, IL, {
+          title: 'פגישה',
+          start_at: '2026-07-15T10:50:00',
+          end_at: '2026-07-15T10:00:00',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(repository.create).not.toHaveBeenCalled();
+    });
   });
 
   describe('list', () => {
@@ -288,7 +319,9 @@ describe('CalendarService', () => {
     });
 
     it('converts provided times and passes explicit nulls through', async () => {
-      const stored = makeEvent({ therapistId: user.userId });
+      // stored end (12:00 UTC) stays after the new 11:00 local (08:00 UTC) start
+      const stored = makeEvent({ therapistId: user.userId, endAt: utc('2026-07-15T12:00:00Z') });
+      repository.findById.mockResolvedValue(stored);
       repository.update.mockResolvedValue(stored);
       await service.update(user, stored.id, IL, {
         start_at: '2026-07-15T11:00:00',
@@ -307,6 +340,46 @@ describe('CalendarService', () => {
       await expect(service.update(user, randomUUID(), IL, { title: 'חדש' })).rejects.toThrow(
         ResourceNotFoundException,
       );
+    });
+
+    it('rejects an inverted interval when both bounds are supplied (400)', async () => {
+      const stored = makeEvent({ therapistId: user.userId });
+      repository.findById.mockResolvedValue(stored);
+      await expect(
+        service.update(user, stored.id, IL, {
+          start_at: '2026-07-15T11:00:00',
+          end_at: '2026-07-15T10:00:00',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a single-bound update that inverts against the stored event (400)', async () => {
+      // stored: 07:00–07:50 UTC; new end 06:00 local (03:00 UTC) precedes the stored start
+      const stored = makeEvent({ therapistId: user.userId });
+      repository.findById.mockResolvedValue(stored);
+      await expect(
+        service.update(user, stored.id, IL, { end_at: '2026-07-15T06:00:00' }),
+      ).rejects.toThrow(BadRequestException);
+      expect(repository.update).not.toHaveBeenCalled();
+    });
+
+    it('accepts a single-bound update that keeps the interval ordered', async () => {
+      const stored = makeEvent({ therapistId: user.userId });
+      repository.findById.mockResolvedValue(stored);
+      repository.update.mockResolvedValue(stored);
+      await expect(
+        service.update(user, stored.id, IL, { end_at: '2026-07-15T12:00:00' }),
+      ).resolves.toBeDefined();
+      expect(repository.update).toHaveBeenCalled();
+    });
+
+    it('404s a time-changing update when the event is absent', async () => {
+      repository.findById.mockResolvedValue(null);
+      await expect(
+        service.update(user, randomUUID(), IL, { start_at: '2026-07-15T11:00:00' }),
+      ).rejects.toThrow(ResourceNotFoundException);
+      expect(repository.update).not.toHaveBeenCalled();
     });
   });
 

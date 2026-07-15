@@ -2,6 +2,7 @@ import { HttpStatus } from '@nestjs/common';
 import {
   AppException,
   DuplicateResourceException,
+  PatientHasLinkedEventsException,
   ResourceNotFoundException,
 } from './app.exception';
 
@@ -32,6 +33,18 @@ describe('DuplicateResourceException', () => {
     expect(exception.getResponse()).toMatchObject({
       code: 'RESOURCE_ALREADY_EXISTS',
       message: 'User with this email already exists',
+    });
+  });
+});
+
+describe('PatientHasLinkedEventsException', () => {
+  it('maps to 409 with a PATIENT_HAS_LINKED_EVENTS code', () => {
+    const exception = new PatientHasLinkedEventsException();
+
+    expect(exception.getStatus()).toBe(HttpStatus.CONFLICT);
+    expect(exception.getResponse()).toMatchObject({
+      code: 'PATIENT_HAS_LINKED_EVENTS',
+      message: 'cannot delete a patient with linked calendar events',
     });
   });
 });
