@@ -69,3 +69,16 @@ test('settings profile is served by GET /auth/me', async ({ page }) => {
   expect(body.full_name).toBe('ד״ר רותם שגב');
   await expect(page.getByRole('heading', { name: 'הגדרות' })).toBeVisible();
 });
+
+test('prep report renders content from the report API (no blocking error)', async ({ page }) => {
+  await demoLogin(page);
+  const report = page.waitForResponse(
+    (r) => new URL(r.url()).pathname.endsWith('/next-meeting-report') && r.ok(),
+    { timeout: 20_000 },
+  );
+  await page.goto('/#/report/00000000-0000-4000-8000-0000000000a1');
+  await report;
+  await expect(page.getByRole('heading', { name: 'דוח הכנה לפגישה' })).toBeVisible();
+  // the graceful path never surfaces the raw backend generation error
+  await expect(page.getByText('ANTHROPIC_API_KEY')).toHaveCount(0);
+});

@@ -167,7 +167,6 @@ export default function ReportPage() {
   const patientOptions: string[] = S.patients.map((p: any) => p.name);
   const onTimelinePatient = (e: any) => { const p = S.patients.find((x: any) => x.name === e.target.value); if (p) navigate(S.route, { patientId: p.id }); };
 
-  const reportReady = !useApi || (apiReport?.status === 'ready');
   const reportIntro = useMemo(() => {
     if (useApi && apiReport?.status === 'ready') return apiReport.intro || '';
     return mockIntro(cp.name);
@@ -199,8 +198,12 @@ export default function ReportPage() {
     : '';
 
   const showSkeleton = (!useApi && S.loading) || (useApi && (apiLoading || apiReport?.status === 'pending' || apiReport?.status === 'running'));
-  const showError = useApi && !apiLoading && (!!apiError || apiReport?.status === 'failed');
-  const showBody = !showSkeleton && !showError && (!useApi || reportReady);
+  // A failed live report (e.g. generation unavailable without an AI key) still has
+  // demo fallback content — show it gracefully rather than a blocking error. Only a
+  // hard load error (no report to fall back on) blocks the screen.
+  const reportFailed = useApi && apiReport?.status === 'failed';
+  const showError = useApi && !apiLoading && !!apiError && !reportFailed;
+  const showBody = !showSkeleton && !showError;
 
   // audio brief
   const secs = Math.round((S.briefProgress / 100) * 108);
@@ -285,6 +288,11 @@ export default function ReportPage() {
 
       {showBody && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {reportFailed && (
+            <div role="status" style={{ background: 'var(--surface-2)', border: '1px solid var(--divider)', borderRadius: 10, padding: '12px 16px', color: 'var(--text-secondary)', fontSize: 13.5 }}>
+              יצירת הדוח החי אינה זמינה כרגע · מוצג תוכן לדוגמה.
+            </div>
+          )}
           <div style={{ background: 'var(--paper)', border: '1px solid var(--divider)', borderRadius: 10, boxShadow: CARD_SHADOW, padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
             <div style={{ width: 52, height: 52, borderRadius: '50%', background: cpView.avBg, color: cpView.avColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 18, flexShrink: 0 }}>{cpView.initials}</div>
             <div style={{ flex: 1, minWidth: 160 }}>
