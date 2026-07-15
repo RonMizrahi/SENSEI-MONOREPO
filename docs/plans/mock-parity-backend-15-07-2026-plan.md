@@ -169,10 +169,15 @@ Steps:
 |---|---|---|
 | M1 Foundation (gating + identity + calendar) | DONE | SEED_DEMO_DATA + GUC-gated runner (`set_config(is_local)`), 0004 seeds therapist + 8 appts. Gate A passed (3 reviewers clean, security clean). 386 unit + 95 int green. |
 | M2 Sessions/summaries/transcripts/insights | BACKEND DONE | 0005 insight + 0006 seed (31 sessions) + GET /meetings/:id/transcript. 389 unit + 97 int green, live on Supabase. FE wiring → consolidated pass (see note). |
-| M3 Notifications | TODO | |
-| M4 Profile + settings | TODO | |
-| M5 Reports + notes + letters | TODO | |
-| M6 Integration + QA + close-out | TODO | |
+| M3 Notifications | BACKEND DONE | notifications table + module + 9 seeded; GET/PATCH. Live on Supabase. |
+| M4 Profile + settings | BACKEND DONE | users profile cols + user_settings; GET/PATCH /auth/me + GET/PUT /settings; seeded. Live. |
+| M5 Reports + notes + letters | BACKEND DONE | patient_reports.questions + seed; patient_notes + GET/PUT + seed. Letters = derived (no table). Live. |
+| M-FE Consolidated SPA wiring | MOSTLY DONE | Wired to live API: report questions, notification center (read/archived via PATCH), clinical notes (patient + letter), therapist profile. Full service layer (transcripts/notifications/profile/settings/notes) + summary `insight`/report `questions` fields. web 1.2.0, 368 tests + build green. **Deferred:** SessionDetail/Transcript (needs the SPA's local sessions mapped to real meeting ids) and settings-prefs sync (theme/a11y equal SPA defaults → no visible change) — services already in place. |
+| M6 Integration + QA + close-out | IN PROGRESS | Backend live-verified on Supabase throughout; root CLAUDE.md updated; single PR. QA (qa-engineer) + Gate B recommended as the acceptance gate. |
+
+**Backend complete (M1–M5):** all APIs + gated seeds land migrations 0004–0012; 401 unit
++ 103 integration green; every endpoint live-verified against the dev Supabase. Remaining:
+the consolidated frontend wiring (M-FE) + close-out/QA (M6).
 
 **Execution note (15-07-2026):** to avoid repeated React-skill context switches, the
 per-milestone SPA wiring is batched into ONE consolidated frontend pass ("M-FE") after
