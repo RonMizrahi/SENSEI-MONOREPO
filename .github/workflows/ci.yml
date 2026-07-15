@@ -34,3 +34,9 @@ jobs:
 
       - name: Integration tests (Testcontainers)
         run: pnpm turbo run test:int
+
+      - name: Install Playwright browser
+        run: pnpm --filter @sensei/web exec playwright install --with-deps chromium
+
+      - name: E2E (Playwright — MOCK_MODE API + Vite, boots its own servers)
+        run: pnpm --filter @sensei/web e2e
