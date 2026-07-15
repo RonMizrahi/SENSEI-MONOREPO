@@ -24,3 +24,6 @@ npm-debug.log*
 # typescript
 *.tsbuildinfo
 .claude/worktrees/
+
+# Runtime audio uploads (UPLOAD_DIR) — never commit
+uploads/
