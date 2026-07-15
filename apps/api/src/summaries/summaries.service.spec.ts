@@ -125,6 +125,7 @@ describe('SummariesService', () => {
         text: null,
         model: null,
         error: null,
+        insight: null,
       });
       expect(repository.meetingBelongsToTherapist).toHaveBeenCalledWith(meetingId, user.userId);
       expect(queue.enqueue).toHaveBeenCalledWith(meetingId);

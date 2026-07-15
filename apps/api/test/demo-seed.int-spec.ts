@@ -2,6 +2,7 @@
 // migrations materialize the demo therapist + roster + appointments, and the SPA's
 // login flow (demo1234) fetches them; with the flag off, nothing is seeded. ONE
 // mode per file: integration (MOCK_MODE=false), a fresh DB provisioned per app.
+import { randomUUID } from 'node:crypto';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { z } from 'zod';
@@ -41,6 +42,24 @@ const calendarListSchema = z.array(
     patient_id: z.uuid().nullable(),
   }),
 );
+const summarySchema = z.object({
+  meeting_id: z.uuid(),
+  status: z.enum(['pending', 'running', 'ready', 'failed']),
+  text: z.string().nullable(),
+  model: z.string().nullable(),
+  error: z.string().nullable(),
+  insight: z.string().nullable(),
+});
+const transcriptSchema = z.object({
+  meeting_id: z.uuid(),
+  language: z.string(),
+  raw_text: z.string(),
+  segments: z.array(z.object({ speaker: z.string(), text: z.string() })),
+});
+// The seeded past sessions fall in this window (SESSION_DATES: May–Jun 2026).
+const PAST_FROM = '2026-05-01';
+const PAST_TO = '2026-06-30';
+const SEEDED_SESSION_COUNT = 31;
 
 /** YYYY-MM-DD `days` from today, for the /calendar from/to window. */
 function isoDate(days: number): string {
@@ -106,6 +125,44 @@ describe('demo-data seed gating (integration)', () => {
       for (const event of events) {
         expect(event.therapist_id).toBe(DEMO_THERAPIST_ID);
       }
+    });
+
+    it('materializes past sessions with a ready summary (+insight) and transcript', async () => {
+      const token = await loginDemo(seeded.httpServer);
+      const cal = await request(seeded.httpServer)
+        .get('/calendar')
+        .query({ from: PAST_FROM, to: PAST_TO, time_zone: 'Asia/Jerusalem' })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const past = calendarListSchema.parse(cal.body);
+      expect(past).toHaveLength(SEEDED_SESSION_COUNT);
+
+      const meetingId = past[0].id;
+      const summaryRes = await request(seeded.httpServer)
+        .get(`/meetings/${meetingId}/summary`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const summary = summarySchema.parse(summaryRes.body);
+      expect(summary.status).toBe('ready');
+      expect(summary.text).toBeTruthy();
+      expect(summary.insight).toBeTruthy();
+
+      const transcriptRes = await request(seeded.httpServer)
+        .get(`/meetings/${meetingId}/transcript`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const transcript = transcriptSchema.parse(transcriptRes.body);
+      expect(transcript.language).toBe('he');
+      expect(transcript.segments.length).toBeGreaterThan(0);
+      expect(transcript.segments[0].speaker).toBeTruthy();
+    });
+
+    it('404s a transcript for a meeting the therapist does not own', async () => {
+      const token = await loginDemo(seeded.httpServer);
+      await request(seeded.httpServer)
+        .get(`/meetings/${randomUUID()}/transcript`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
     });
   });
   // The gate (SEED_DEMO_DATA off → nothing seeded) is asserted in db.int-spec,

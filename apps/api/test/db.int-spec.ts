@@ -8,6 +8,8 @@ const INIT_MIGRATION = '0001_init.sql';
 const REPORTS_PER_THERAPIST_MIGRATION = '0002_patient_reports_per_therapist.sql';
 const SEED_DEMO_PROTOTYPE_MIGRATION = '0003_seed_demo_prototype.sql';
 const SEED_DEMO_IDENTITY_MIGRATION = '0004_seed_demo_identity.sql';
+const MEETING_SUMMARY_INSIGHT_MIGRATION = '0005_meeting_summary_insight.sql';
+const SEED_DEMO_SESSIONS_MIGRATION = '0006_seed_demo_sessions.sql';
 // Every versioned SQL file the boot-time runner applies, in filename order. Seed
 // migrations apply (and are tracked) in every env; their inserts are gated by
 // SEED_DEMO_DATA, so this list is identical across dev and prod.
@@ -16,6 +18,8 @@ const EXPECTED_MIGRATIONS = [
   REPORTS_PER_THERAPIST_MIGRATION,
   SEED_DEMO_PROTOTYPE_MIGRATION,
   SEED_DEMO_IDENTITY_MIGRATION,
+  MEETING_SUMMARY_INSIGHT_MIGRATION,
+  SEED_DEMO_SESSIONS_MIGRATION,
 ];
 const EXPECTED_TABLES = [
   '_migrations',

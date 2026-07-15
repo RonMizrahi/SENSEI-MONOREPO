@@ -43,6 +43,14 @@ export class SummaryResponseDto {
   })
   error!: string | null;
 
+  @ApiProperty({
+    description: 'Short per-session clinical insight shown on the session detail screen',
+    nullable: true,
+    type: String,
+    example: 'נצפה שימוש עצמאי בכלי ויסות תחת לחץ…',
+  })
+  insight!: string | null;
+
   /** Maps a MeetingSummary row onto the wire shape (empty model → null, Python parity). */
   static fromEntity(summary: MeetingSummary): SummaryResponseDto {
     const dto = new SummaryResponseDto();
@@ -51,6 +59,7 @@ export class SummaryResponseDto {
     dto.text = summary.text;
     dto.model = summary.model || null;
     dto.error = summary.error;
+    dto.insight = summary.insight;
     return dto;
   }
 
@@ -62,6 +71,7 @@ export class SummaryResponseDto {
     dto.text = null;
     dto.model = null;
     dto.error = null;
+    dto.insight = null;
     return dto;
   }
 }

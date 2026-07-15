@@ -57,6 +57,7 @@ describe('SummariesController', () => {
       text: null,
       model: null,
       error: null,
+      insight: null,
     });
   });
 });

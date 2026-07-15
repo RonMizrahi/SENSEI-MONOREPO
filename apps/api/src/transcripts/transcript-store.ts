@@ -18,4 +18,6 @@ export interface TranscriptStore extends TranscriptReader {
   existsByMeetingId(meetingId: string): Promise<boolean>;
   /** Persists a new transcript and returns the stored row. */
   create(transcript: NewTranscript): Promise<Transcript>;
+  /** Whether the meeting exists AND is owned by the therapist (scoped read). */
+  meetingBelongsToTherapist(meetingId: string, therapistId: string): Promise<boolean>;
 }
