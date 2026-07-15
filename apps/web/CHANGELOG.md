@@ -22,6 +22,10 @@ notifications, profile, settings, and clinical notes; the summary carries an
 - **Restored sessions acquire a live API token** on boot when the backend is
   wired (previously only demo-mode did), so a persisted session sources real data
   instead of silently falling back to the demo copy.
+- **Playwright e2e harness** (`npm run e2e`, `e2e/*.e2e.ts`) — money-path journeys
+  that drive the real SPA in a browser against a live backend and assert the API
+  was actually served (demo login → calendar, notification center, profile). In
+  CI it boots a MOCK_MODE API + Vite; locally it reuses the running servers.
 
 Session-detail / transcript wiring (which needs the SPA's locally-generated
 sessions mapped to real meeting ids) is tracked as a follow-up; the backend
