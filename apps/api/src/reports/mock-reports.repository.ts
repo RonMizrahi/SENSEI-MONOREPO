@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { SEED_EVENTS, SEED_PATIENTS, SEED_SUMMARY_TEXT } from '../mock/seed';
+import { SEED_EVENTS, SEED_PATIENTS, SEED_SUMMARY_TEXT, SEED_USER } from '../mock/seed';
 import { PatientReport } from './entities/patient-report.entity';
 import {
   pendingResetFields,
@@ -18,6 +18,13 @@ export class MockReportsRepository implements ReportsRepository {
   /** Whether the id belongs to a seeded demo patient. */
   patientExists(patientId: string): Promise<boolean> {
     return Promise.resolve(SEED_PATIENTS.some((patient) => patient.id === patientId));
+  }
+
+  /** Whether SEED_USER owns a seeded meeting with the patient (parity scoping). */
+  therapistHasMeetingWithPatient(patientId: string, therapistId: string): Promise<boolean> {
+    return Promise.resolve(
+      therapistId === SEED_USER.id && SEED_EVENTS.some((event) => event.patientId === patientId),
+    );
   }
 
   /** The patient's report row, or null when none was ever requested. */
@@ -79,8 +86,9 @@ export class MockReportsRepository implements ReportsRepository {
     return Promise.resolve();
   }
 
-  /** Every seeded meeting of the patient counts as a ready summary (canned text). */
-  findReadySummaries(patientId: string): Promise<ReadyMeetingSummary[]> {
+  /** The therapist's seeded meetings for the patient count as ready summaries (canned text). */
+  findReadySummaries(patientId: string, therapistId: string): Promise<ReadyMeetingSummary[]> {
+    if (therapistId !== SEED_USER.id) return Promise.resolve([]);
     const summaries = SEED_EVENTS.filter((event) => event.patientId === patientId)
       .sort((a, b) => a.dayOffset - b.dayOffset || a.startHour - b.startHour)
       .map((event) => ({ meetingId: event.id, text: SEED_SUMMARY_TEXT }));

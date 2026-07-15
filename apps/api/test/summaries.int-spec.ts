@@ -4,6 +4,7 @@
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
+import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -48,6 +49,8 @@ describe('summaries (integration)', () => {
   let dataSource: DataSource;
   let token: string;
   let therapistId: string;
+  let otherToken: string;
+  let throttlerStorage: ThrottlerStorageService;
   const previousEnv = new Map<string, string | undefined>();
 
   // DB-backed stand-in for the audio-transcription unit's TRANSCRIPT_READER
@@ -89,9 +92,16 @@ describe('summaries (integration)', () => {
     httpServer = app.getHttpServer() as App;
     dataSource = app.get(DataSource);
 
+    throttlerStorage = app.get<ThrottlerStorageService>(ThrottlerStorage);
     await applySchemaIfMissing(dataSource);
     ({ token, therapistId } = await seedTherapist(app, dataSource));
+    ({ token: otherToken } = await seedTherapist(app, dataSource));
   }, 180_000);
+
+  beforeEach(() => {
+    // The global rate limiter is not under test — keep sequential tests independent.
+    throttlerStorage.storage.clear();
+  });
 
   afterAll(async () => {
     await app.close();
@@ -270,5 +280,37 @@ describe('summaries (integration)', () => {
     const done = await pollUntilTerminal(meetingId);
     expect(done.status).toBe('ready');
     expect(done.text).toBe(STUB_SUMMARY_TEXT);
+  });
+
+  describe('cross-therapist isolation (IDOR)', () => {
+    // therapist A owns the meeting + summary; therapist B (otherToken) is a foreign caller.
+    it('B gets 404 on GET for A’s ready summary; A (owner) gets 200', async () => {
+      const meetingId = await insertMeeting();
+      await insertTranscript(meetingId, 'תמליל של מטפל א׳.');
+      await request(httpServer)
+        .post(`/meetings/${meetingId}/summary`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(202);
+      await pollUntilTerminal(meetingId);
+
+      await request(httpServer)
+        .get(`/meetings/${meetingId}/summary`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(404);
+
+      // owner still reads it (positive control)
+      await request(httpServer)
+        .get(`/meetings/${meetingId}/summary`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+    });
+
+    it('B gets 404 on POST (re-queue) for A’s meeting', async () => {
+      const meetingId = await insertMeeting();
+      await request(httpServer)
+        .post(`/meetings/${meetingId}/summary`)
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(404);
+    });
   });
 });

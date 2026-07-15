@@ -19,6 +19,8 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { SummaryResponseDto } from './dto/summary-response.dto';
 import type { GenerationStatus } from './entities/meeting-summary.entity';
 import { SummariesService } from './summaries.service';
@@ -49,13 +51,14 @@ export class SummariesController {
   @ApiParam({ name: 'meetingId', description: 'Meeting (calendar event) id', format: 'uuid' })
   @ApiOkResponse({ type: SummaryResponseDto, description: 'Summary is ready or failed' })
   @ApiAcceptedResponse({ type: SummaryResponseDto, description: 'Generation pending or running' })
-  @ApiNotFoundResponse({ description: 'No summary exists for this meeting' })
+  @ApiNotFoundResponse({ description: 'No summary (or the meeting is another therapist’s)' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid Bearer token' })
   async getSummary(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('meetingId', ParseUUIDPipe) meetingId: string,
     @Res({ passthrough: true }) response: Response,
   ): Promise<SummaryResponseDto> {
-    const summary = await this.summariesService.getSummary(meetingId);
+    const summary = await this.summariesService.getSummary(user, meetingId);
     response.status(STATUS_CODE_BY_GENERATION[summary.status]);
     return summary;
   }
@@ -70,11 +73,12 @@ export class SummariesController {
   })
   @ApiParam({ name: 'meetingId', description: 'Meeting (calendar event) id', format: 'uuid' })
   @ApiAcceptedResponse({ type: SummaryResponseDto, description: 'Generation queued (pending)' })
-  @ApiNotFoundResponse({ description: 'Meeting does not exist' })
+  @ApiNotFoundResponse({ description: 'Meeting does not exist (or is another therapist’s)' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid Bearer token' })
   requestSummary(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('meetingId', ParseUUIDPipe) meetingId: string,
   ): Promise<SummaryResponseDto> {
-    return this.summariesService.requestSummary(meetingId);
+    return this.summariesService.requestSummary(user, meetingId);
   }
 }

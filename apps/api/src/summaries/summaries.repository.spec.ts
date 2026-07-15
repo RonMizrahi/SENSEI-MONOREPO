@@ -1,4 +1,4 @@
-import { SEED_EVENTS, SEED_MOCK_MODEL, SEED_SUMMARY_TEXT } from '../mock/seed';
+import { SEED_EVENTS, SEED_MOCK_MODEL, SEED_SUMMARY_TEXT, SEED_USER } from '../mock/seed';
 import { SummariesMockRepository } from './summaries.repository';
 
 describe('SummariesMockRepository', () => {
@@ -87,9 +87,18 @@ describe('SummariesMockRepository', () => {
     expect((await repository.findByMeetingId(pendingId))?.status).toBe('pending');
   });
 
-  it('meetingExists validates against the seeded calendar only', async () => {
-    await expect(repository.meetingExists(SEED_EVENTS[1].id)).resolves.toBe(true);
-    await expect(repository.meetingExists(crypto.randomUUID())).resolves.toBe(false);
+  it('meetingBelongsToTherapist is true only for a seeded meeting owned by SEED_USER', async () => {
+    await expect(
+      repository.meetingBelongsToTherapist(SEED_EVENTS[1].id, SEED_USER.id),
+    ).resolves.toBe(true);
+    // right meeting, wrong therapist → not owned
+    await expect(
+      repository.meetingBelongsToTherapist(SEED_EVENTS[1].id, crypto.randomUUID()),
+    ).resolves.toBe(false);
+    // unknown meeting, right therapist → absent
+    await expect(
+      repository.meetingBelongsToTherapist(crypto.randomUUID(), SEED_USER.id),
+    ).resolves.toBe(false);
   });
 
   it('returned rows are copies — mutating them does not corrupt the store', async () => {

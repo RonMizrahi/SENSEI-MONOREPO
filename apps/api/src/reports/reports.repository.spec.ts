@@ -5,6 +5,7 @@ import { TypeormReportsRepository } from './reports.repository';
 
 interface RepoMock {
   existsBy: jest.Mock;
+  exists: jest.Mock;
   findOne: jest.Mock;
   upsert: jest.Mock;
   update: jest.Mock;
@@ -38,6 +39,7 @@ describe('TypeormReportsRepository', () => {
     queryBuilder = makeQueryBuilder();
     repoMock = {
       existsBy: jest.fn(),
+      exists: jest.fn(),
       findOne: jest.fn(),
       upsert: jest.fn().mockResolvedValue({}),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
@@ -52,6 +54,16 @@ describe('TypeormReportsRepository', () => {
     repoMock.existsBy.mockResolvedValue(true);
     await expect(repository.patientExists(patientId)).resolves.toBe(true);
     expect(repoMock.existsBy).toHaveBeenCalledWith({ id: patientId });
+  });
+
+  it('therapistHasMeetingWithPatient scopes the existence check by patient AND therapist', async () => {
+    const patientId = randomUUID();
+    const therapistId = randomUUID();
+    repoMock.exists.mockResolvedValue(true);
+    await expect(
+      repository.therapistHasMeetingWithPatient(patientId, therapistId),
+    ).resolves.toBe(true);
+    expect(repoMock.exists).toHaveBeenCalledWith({ where: { patientId, therapistId } });
   });
 
   it('findByPatientId queries by the patient id', async () => {
@@ -113,18 +125,22 @@ describe('TypeormReportsRepository', () => {
     );
   });
 
-  it('findReadySummaries filters ready rows for the patient ordered by start time', async () => {
+  it('findReadySummaries filters ready rows for the patient AND therapist, ordered by start time', async () => {
     const patientId = randomUUID();
+    const therapistId = randomUUID();
     queryBuilder.getMany.mockResolvedValue([
       { meetingId: 'm1', text: 'סיכום' },
       { meetingId: 'm2', text: null },
     ]);
-    const summaries = await repository.findReadySummaries(patientId);
+    const summaries = await repository.findReadySummaries(patientId, therapistId);
     expect(summaries).toEqual([
       { meetingId: 'm1', text: 'סיכום' },
       { meetingId: 'm2', text: '' },
     ]);
     expect(queryBuilder.where).toHaveBeenCalledWith('event.patientId = :patientId', { patientId });
+    expect(queryBuilder.andWhere).toHaveBeenCalledWith('event.therapistId = :therapistId', {
+      therapistId,
+    });
     expect(queryBuilder.andWhere).toHaveBeenCalledWith('summary.status = :status', {
       status: 'ready',
     });

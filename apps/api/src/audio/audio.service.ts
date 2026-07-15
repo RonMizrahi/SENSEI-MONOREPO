@@ -1,6 +1,7 @@
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { extname } from 'node:path';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import { AppException, ResourceNotFoundException } from '../common/exceptions/app.exception';
 import type { Env } from '../config/env.schema';
 import { SUMMARY_QUEUE, type SummaryQueue } from '../summaries/summary-queue';
@@ -50,15 +51,16 @@ export class AudioService {
   ) {}
 
   /**
-   * Validates, transcribes, and persists an uploaded meeting recording.
+   * Validates, transcribes, and persists a recording for the caller's meeting.
    * @throws AppException 400/404/409/413/415 per the matrix, 502 on provider failure.
    */
   async upload(
+    user: AuthenticatedUser,
     file: Express.Multer.File | undefined,
     fields: UploadAudioDto,
   ): Promise<AudioUploadResponseDto> {
     const upload = this.validateFile(file);
-    await this.validateTargets(fields);
+    await this.validateTargets(user, fields);
 
     const saved = await this.storage.save(upload.buffer, upload.originalname, upload.mimetype);
     // On transcription failure the stored file is kept so the client can retry.
@@ -166,10 +168,13 @@ export class AudioService {
     return file;
   }
 
-  /** Validates meeting existence, patient linkage, and transcript uniqueness. */
-  private async validateTargets(fields: UploadAudioDto): Promise<void> {
+  /** Validates meeting ownership, patient linkage, and transcript uniqueness. */
+  private async validateTargets(user: AuthenticatedUser, fields: UploadAudioDto): Promise<void> {
     const meeting = await this.uploadTargets.findMeeting(fields.meeting_id);
-    if (meeting === null) throw new ResourceNotFoundException('meeting', fields.meeting_id);
+    // 404 (never 403) when absent or owned by another therapist — don't reveal existence.
+    if (meeting === null || meeting.therapistId !== user.userId) {
+      throw new ResourceNotFoundException('meeting', fields.meeting_id);
+    }
 
     if (fields.patient_id !== undefined) {
       if (!(await this.uploadTargets.patientExists(fields.patient_id))) {

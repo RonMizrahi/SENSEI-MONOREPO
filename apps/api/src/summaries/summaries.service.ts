@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import { ResourceNotFoundException } from '../common/exceptions/app.exception';
 import { SummaryResponseDto } from './dto/summary-response.dto';
 import { SUMMARIES_REPOSITORY, type SummariesRepository } from './summaries.repository';
@@ -13,10 +14,13 @@ export class SummariesService {
   ) {}
 
   /**
-   * Fetches the meeting's summary row.
-   * @throws ResourceNotFoundException when no summary row exists (404).
+   * Fetches the caller's meeting summary row.
+   * @throws ResourceNotFoundException when absent or the meeting is not the caller's (404).
    */
-  async getSummary(meetingId: string): Promise<SummaryResponseDto> {
+  async getSummary(user: AuthenticatedUser, meetingId: string): Promise<SummaryResponseDto> {
+    if (!(await this.summaries.meetingBelongsToTherapist(meetingId, user.userId))) {
+      throw new ResourceNotFoundException('summary for meeting', meetingId);
+    }
     const summary = await this.summaries.findByMeetingId(meetingId);
     if (!summary) {
       throw new ResourceNotFoundException('summary for meeting', meetingId);
@@ -25,11 +29,11 @@ export class SummariesService {
   }
 
   /**
-   * Validates the meeting and (re)queues generation; returns the pending body.
-   * @throws ResourceNotFoundException when the meeting does not exist (404).
+   * Validates the caller's meeting and (re)queues generation; returns the pending body.
+   * @throws ResourceNotFoundException when absent or the meeting is not the caller's (404).
    */
-  async requestSummary(meetingId: string): Promise<SummaryResponseDto> {
-    if (!(await this.summaries.meetingExists(meetingId))) {
+  async requestSummary(user: AuthenticatedUser, meetingId: string): Promise<SummaryResponseDto> {
+    if (!(await this.summaries.meetingBelongsToTherapist(meetingId, user.userId))) {
       throw new ResourceNotFoundException('meeting', meetingId);
     }
     await this.queue.enqueue(meetingId);

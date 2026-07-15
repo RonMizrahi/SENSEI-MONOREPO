@@ -1,5 +1,6 @@
 import { Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import { ResourceNotFoundException } from '../common/exceptions/app.exception';
 import { NextMeetingReportDto } from './dto/next-meeting-report.dto';
 import { PatientReport } from './entities/patient-report.entity';
@@ -39,10 +40,13 @@ export class ReportsService implements OnApplicationBootstrap {
   }
 
   /**
-   * The patient's current report row.
-   * @throws ResourceNotFoundException when no report was ever requested.
+   * The caller's current report row for the patient.
+   * @throws ResourceNotFoundException when unrequested or the caller has no meeting with them.
    */
-  async getReport(patientId: string): Promise<NextMeetingReportDto> {
+  async getReport(user: AuthenticatedUser, patientId: string): Promise<NextMeetingReportDto> {
+    if (!(await this.reportsRepository.therapistHasMeetingWithPatient(patientId, user.userId))) {
+      throw new ResourceNotFoundException('Next-meeting report for patient', patientId);
+    }
     const report = await this.reportsRepository.findByPatientId(patientId);
     if (!report) throw new ResourceNotFoundException('Next-meeting report for patient', patientId);
     return this.toDto(report);
@@ -50,17 +54,21 @@ export class ReportsService implements OnApplicationBootstrap {
 
   /**
    * Resets the patient's report to 'pending' and fires generation without awaiting.
-   * @throws ResourceNotFoundException when the patient does not exist.
+   * @throws ResourceNotFoundException when the patient is unknown or not the caller's.
    */
-  async requestReport(patientId: string): Promise<NextMeetingReportDto> {
+  async requestReport(user: AuthenticatedUser, patientId: string): Promise<NextMeetingReportDto> {
     const exists = await this.reportsRepository.patientExists(patientId);
     if (!exists) throw new ResourceNotFoundException('Patient', patientId);
+    // 404 (never 403) unless the caller owns a meeting with this patient.
+    if (!(await this.reportsRepository.therapistHasMeetingWithPatient(patientId, user.userId))) {
+      throw new ResourceNotFoundException('Patient', patientId);
+    }
     const pending = await this.reportsRepository.resetToPending(patientId);
     const runId = randomUUID();
     this.activeRuns.set(patientId, runId);
     // fire-and-forget: failures land on the row inside generate(); this catch
     // only guards the guard (e.g. markFailed itself failing) so nothing rejects.
-    void this.generate(patientId, runId).catch((error: unknown) => {
+    void this.generate(patientId, user.userId, runId).catch((error: unknown) => {
       this.logger.error(
         `Report generation cleanup failed for patient ${patientId}: ${errorMessage(error)}`,
       );
@@ -74,9 +82,9 @@ export class ReportsService implements OnApplicationBootstrap {
   }
 
   /** Runs one generation: collect summaries → running → ready, or failed on any error. */
-  private async generate(patientId: string, runId: string): Promise<void> {
+  private async generate(patientId: string, therapistId: string, runId: string): Promise<void> {
     try {
-      const summaries = await this.reportsRepository.findReadySummaries(patientId);
+      const summaries = await this.reportsRepository.findReadySummaries(patientId, therapistId);
       if (!this.isCurrentRun(patientId, runId)) return;
       if (summaries.length === 0) {
         await this.reportsRepository.markFailed(patientId, NO_SUMMARIES_ERROR);

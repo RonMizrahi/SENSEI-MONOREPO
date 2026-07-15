@@ -3,6 +3,7 @@
 import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
+import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
 import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -143,6 +144,9 @@ describe('reports (integration)', () => {
   let dataSource: DataSource;
   let token: string;
   let userId: string;
+  let otherToken: string;
+  let otherUserId: string;
+  let throttlerStorage: ThrottlerStorageService;
 
   const pathFor = (patientId: string): string => `/patients/${patientId}/next-meeting-report`;
 
@@ -156,15 +160,24 @@ describe('reports (integration)', () => {
     return patientId;
   }
 
-  /** Inserts a calendar event for the patient and returns the meeting id. */
-  async function seedMeeting(patientId: string, startAt: string): Promise<string> {
+  /** Inserts a calendar event owned by a therapist for the patient; returns the meeting id. */
+  async function seedMeetingFor(
+    ownerId: string,
+    patientId: string,
+    startAt: string,
+  ): Promise<string> {
     const meetingId = randomUUID();
     await dataSource.query(
       `INSERT INTO calendar_events (id, title, start_at, end_at, therapist_id, patient_id)
        VALUES ($1, 'פגישה', $2, $2::timestamptz + interval '50 minutes', $3, $4)`,
-      [meetingId, startAt, userId, patientId],
+      [meetingId, startAt, ownerId, patientId],
     );
     return meetingId;
+  }
+
+  /** Inserts a calendar event for the primary therapist and returns the meeting id. */
+  function seedMeeting(patientId: string, startAt: string): Promise<string> {
+    return seedMeetingFor(userId, patientId, startAt);
   }
 
   /** Inserts a meeting summary row. */
@@ -175,13 +188,16 @@ describe('reports (integration)', () => {
     );
   }
 
-  /** Polls GET until the report settles (200), asserting 202 on the way. */
-  async function pollUntilSettled(patientId: string): Promise<request.Response> {
+  /** Polls GET (as the given bearer) until the report settles (200), asserting 202 on the way. */
+  async function pollUntilSettledAs(
+    patientId: string,
+    bearer: string,
+  ): Promise<request.Response> {
     const deadline = Date.now() + POLL_DEADLINE_MS;
     for (;;) {
       const response = await request(httpServer)
         .get(pathFor(patientId))
-        .set('Authorization', `Bearer ${token}`);
+        .set('Authorization', `Bearer ${bearer}`);
       if (response.status === 200) return response;
       expect(response.status).toBe(202);
       if (Date.now() > deadline) throw new Error('report did not settle in time');
@@ -189,14 +205,26 @@ describe('reports (integration)', () => {
     }
   }
 
+  /** Polls as the primary therapist. */
+  function pollUntilSettled(patientId: string): Promise<request.Response> {
+    return pollUntilSettledAs(patientId, token);
+  }
+
   beforeAll(async () => {
     container = await new PostgreSqlContainer('postgres:18-alpine').start();
     ({ app, restore } = await bootAppWithStub(container));
     httpServer = app.getHttpServer() as App;
     dataSource = app.get(DataSource);
+    throttlerStorage = app.get<ThrottlerStorageService>(ThrottlerStorage);
     await ensureSchema(dataSource);
     ({ token, userId } = await createTherapist(app, dataSource));
+    ({ token: otherToken, userId: otherUserId } = await createTherapist(app, dataSource));
   }, 120_000);
+
+  beforeEach(() => {
+    // The global rate limiter is not under test — keep sequential tests independent.
+    throttlerStorage.storage.clear();
+  });
 
   afterAll(async () => {
     await app.close();
@@ -265,6 +293,8 @@ describe('reports (integration)', () => {
 
   it('POST for a patient with no ready summaries settles as failed with the Hebrew error', async () => {
     const patientId = await seedPatient();
+    // The caller owns a meeting with the patient (passes ownership) but it has no ready summary.
+    await seedMeeting(patientId, '2026-01-20T10:00:00Z');
     await request(httpServer)
       .post(pathFor(patientId))
       .set('Authorization', `Bearer ${token}`)
@@ -303,5 +333,54 @@ describe('reports (integration)', () => {
     });
     const settled = await pollUntilSettled(patientId);
     expect(reportSchema.parse(settled.body).status).toBe('ready');
+  });
+
+  describe('cross-therapist isolation (IDOR)', () => {
+    // therapist A owns a meeting + ready summary with the (shared-roster) patient.
+    async function seedPatientWithReadySummaryForA(): Promise<string> {
+      const patientId = await seedPatient();
+      const meetingId = await seedMeeting(patientId, '2026-05-05T10:00:00Z');
+      await seedSummary(meetingId, 'ready', 'סיכום של מטפל א׳');
+      return patientId;
+    }
+
+    it('B gets 404 on GET/POST for a patient B has never met; A (owner) succeeds', async () => {
+      const patientId = await seedPatientWithReadySummaryForA();
+
+      // B never had a meeting with this patient → cannot probe or mint a report.
+      await request(httpServer)
+        .get(pathFor(patientId))
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(404);
+      await request(httpServer)
+        .post(pathFor(patientId))
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(404);
+
+      // owner A can generate and read the report (positive control)
+      await request(httpServer)
+        .post(pathFor(patientId))
+        .set('Authorization', `Bearer ${token}`)
+        .expect(202);
+      const settled = await pollUntilSettled(patientId);
+      expect(reportSchema.parse(settled.body).status).toBe('ready');
+    });
+
+    it('never aggregates another therapist’s summaries — B’s report excludes A’s content', async () => {
+      const patientId = await seedPatientWithReadySummaryForA();
+      // B has their own meeting with the shared patient, but NO ready summary of their own.
+      await seedMeetingFor(otherUserId, patientId, '2026-06-05T10:00:00Z');
+
+      await request(httpServer)
+        .post(pathFor(patientId))
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(202);
+      const settled = await pollUntilSettledAs(patientId, otherToken);
+      // A's ready summary must not leak into B's report → B has no ready summaries → failed.
+      expect(reportSchema.parse(settled.body)).toMatchObject({
+        status: 'failed',
+        error: NO_SUMMARIES_ERROR,
+      });
+    });
   });
 });

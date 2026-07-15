@@ -29,6 +29,8 @@ import {
   ApiTags,
   ApiUnsupportedMediaTypeResponse,
 } from '@nestjs/swagger';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AudioService } from './audio.service';
 import {
   AudioFileInfoDto,
@@ -70,16 +72,17 @@ export class AudioController {
   @ApiBadRequestResponse({
     description: 'Missing/empty file, missing meeting_id, or patient–meeting mismatch',
   })
-  @ApiNotFoundResponse({ description: 'Meeting or patient not found' })
+  @ApiNotFoundResponse({ description: 'Meeting (or owned by another therapist) or patient not found' })
   @ApiConflictResponse({ description: 'A transcript already exists for the meeting' })
   @ApiPayloadTooLargeResponse({ description: 'File exceeds MAX_UPLOAD_BYTES' })
   @ApiUnsupportedMediaTypeResponse({ description: 'Not an accepted audio MIME type' })
   @ApiBadGatewayResponse({ description: 'Transcription provider failure' })
   upload(
+    @CurrentUser() user: AuthenticatedUser,
     @UploadedFile() file: Express.Multer.File | undefined,
     @Body() fields: UploadAudioDto,
   ): Promise<AudioUploadResponseDto> {
-    return this.audioService.upload(file, fields);
+    return this.audioService.upload(user, file, fields);
   }
 
   @Get()

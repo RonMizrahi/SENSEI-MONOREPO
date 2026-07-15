@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectDataSource, InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository } from 'typeorm';
 import { CalendarEvent } from '../calendar/entities/calendar-event.entity';
-import { SEED_EVENTS, SEED_MOCK_MODEL, SEED_SUMMARY_TEXT } from '../mock/seed';
+import { SEED_EVENTS, SEED_MOCK_MODEL, SEED_SUMMARY_TEXT, SEED_USER } from '../mock/seed';
 import { MeetingSummary } from './entities/meeting-summary.entity';
 
 /** Injection token — real TypeORM repository, or the seeded in-memory one in MOCK_MODE. */
@@ -22,8 +22,8 @@ export interface SummariesRepository {
   findByMeetingId(meetingId: string): Promise<MeetingSummary | null>;
   /** Fails every row stranded in 'running'; returns how many were swept. */
   failAllRunning(error: string): Promise<number>;
-  /** Whether the meeting (calendar event) exists. */
-  meetingExists(meetingId: string): Promise<boolean>;
+  /** Whether the meeting (calendar event) exists AND is owned by the therapist. */
+  meetingBelongsToTherapist(meetingId: string, therapistId: string): Promise<boolean>;
 }
 
 /** Postgres-backed implementation over the MeetingSummary entity. */
@@ -68,9 +68,11 @@ export class SummariesTypeormRepository implements SummariesRepository {
     return result.affected ?? 0;
   }
 
-  /** Whether the meeting (calendar event) exists. */
-  meetingExists(meetingId: string): Promise<boolean> {
-    return this.dataSource.getRepository(CalendarEvent).exists({ where: { id: meetingId } });
+  /** Whether the meeting exists AND is owned by the therapist (scoped lookup). */
+  meetingBelongsToTherapist(meetingId: string, therapistId: string): Promise<boolean> {
+    return this.dataSource
+      .getRepository(CalendarEvent)
+      .exists({ where: { id: meetingId, therapistId } });
   }
 }
 
@@ -134,9 +136,11 @@ export class SummariesMockRepository implements SummariesRepository {
     return Promise.resolve(swept);
   }
 
-  /** Whether the meeting exists in the seeded demo calendar. */
-  meetingExists(meetingId: string): Promise<boolean> {
-    return Promise.resolve(SEED_EVENTS.some((event) => event.id === meetingId));
+  /** Whether the seeded meeting exists AND is owned by the therapist (SEED_USER). */
+  meetingBelongsToTherapist(meetingId: string, therapistId: string): Promise<boolean> {
+    return Promise.resolve(
+      therapistId === SEED_USER.id && SEED_EVENTS.some((event) => event.id === meetingId),
+    );
   }
 
   /** Builds a fresh pending row shaped like the MeetingSummary entity. */

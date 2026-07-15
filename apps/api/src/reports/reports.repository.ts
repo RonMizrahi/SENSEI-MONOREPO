@@ -57,6 +57,8 @@ export function pendingResetFields(): Pick<
 export interface ReportsRepository {
   /** Whether a patient row exists for the id. */
   patientExists(patientId: string): Promise<boolean>;
+  /** Whether the therapist owns at least one meeting with the patient. */
+  therapistHasMeetingWithPatient(patientId: string, therapistId: string): Promise<boolean>;
   /** The patient's report row, or null when none was ever requested. */
   findByPatientId(patientId: string): Promise<PatientReport | null>;
   /** Creates or wipes the patient's report row back to a clean 'pending' state. */
@@ -67,8 +69,8 @@ export interface ReportsRepository {
   markReady(patientId: string, fields: ReadyReportFields): Promise<void>;
   /** Marks the patient's report row 'failed' with a user-facing error. */
   markFailed(patientId: string, error: string): Promise<void>;
-  /** The patient's READY meeting summaries ordered by meeting start time (oldest first). */
-  findReadySummaries(patientId: string): Promise<ReadyMeetingSummary[]>;
+  /** The therapist's READY summaries for the patient, ordered by start time (oldest first). */
+  findReadySummaries(patientId: string, therapistId: string): Promise<ReadyMeetingSummary[]>;
   /**
    * Fails every row stranded 'running' (startup sweep after a crash/restart).
    * @returns The number of rows swept.
@@ -84,6 +86,13 @@ export class TypeormReportsRepository implements ReportsRepository {
   /** Whether a patient row exists for the id. */
   patientExists(patientId: string): Promise<boolean> {
     return this.dataSource.getRepository(Patient).existsBy({ id: patientId });
+  }
+
+  /** Whether the therapist owns at least one meeting with the patient. */
+  therapistHasMeetingWithPatient(patientId: string, therapistId: string): Promise<boolean> {
+    return this.dataSource
+      .getRepository(CalendarEvent)
+      .exists({ where: { patientId, therapistId } });
   }
 
   /** The patient's report row, or null when none was ever requested. */
@@ -133,13 +142,17 @@ export class TypeormReportsRepository implements ReportsRepository {
       .update({ patientId }, { status: STATUS_FAILED, error });
   }
 
-  /** The patient's READY meeting summaries ordered by meeting start time (oldest first). */
-  async findReadySummaries(patientId: string): Promise<ReadyMeetingSummary[]> {
+  /** The therapist's READY summaries for the patient, ordered by start time (oldest first). */
+  async findReadySummaries(
+    patientId: string,
+    therapistId: string,
+  ): Promise<ReadyMeetingSummary[]> {
     const summaries = await this.dataSource
       .getRepository(MeetingSummary)
       .createQueryBuilder('summary')
       .innerJoin(CalendarEvent, 'event', 'event.id = summary.meetingId')
       .where('event.patientId = :patientId', { patientId })
+      .andWhere('event.therapistId = :therapistId', { therapistId })
       .andWhere('summary.status = :status', { status: STATUS_READY })
       .orderBy('event.startAt', 'ASC')
       .getMany();

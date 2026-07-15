@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { SEED_EVENTS, SEED_PATIENTS, SEED_SUMMARY_TEXT } from '../mock/seed';
+import { SEED_EVENTS, SEED_PATIENTS, SEED_SUMMARY_TEXT, SEED_USER } from '../mock/seed';
 import { MockReportsRepository } from './mock-reports.repository';
 
 const SEEDED_PATIENT_ID = SEED_PATIENTS[0].id;
@@ -14,6 +14,20 @@ describe('MockReportsRepository', () => {
   it('recognizes seeded patients and rejects unknown ids', async () => {
     await expect(repository.patientExists(SEEDED_PATIENT_ID)).resolves.toBe(true);
     await expect(repository.patientExists(randomUUID())).resolves.toBe(false);
+  });
+
+  it('therapistHasMeetingWithPatient is true only for SEED_USER with a seeded meeting', async () => {
+    await expect(
+      repository.therapistHasMeetingWithPatient(SEEDED_PATIENT_ID, SEED_USER.id),
+    ).resolves.toBe(true);
+    // right patient, wrong therapist → not owned
+    await expect(
+      repository.therapistHasMeetingWithPatient(SEEDED_PATIENT_ID, randomUUID()),
+    ).resolves.toBe(false);
+    // right therapist, patient with no seeded meetings → false
+    await expect(
+      repository.therapistHasMeetingWithPatient(randomUUID(), SEED_USER.id),
+    ).resolves.toBe(false);
   });
 
   it('returns null before any report was requested', async () => {
@@ -66,7 +80,7 @@ describe('MockReportsRepository', () => {
   });
 
   it('serves the seeded meetings as ready summaries in chronological order', async () => {
-    const summaries = await repository.findReadySummaries(SEEDED_PATIENT_ID);
+    const summaries = await repository.findReadySummaries(SEEDED_PATIENT_ID, SEED_USER.id);
     const expected = SEED_EVENTS.filter((event) => event.patientId === SEEDED_PATIENT_ID);
     expect(summaries).toHaveLength(expected.length);
     expect(summaries[0].text).toBe(SEED_SUMMARY_TEXT);
@@ -76,8 +90,14 @@ describe('MockReportsRepository', () => {
     expect(offsets).toEqual([...offsets].sort((a, b) => (a ?? 0) - (b ?? 0)));
   });
 
+  it('returns no summaries for another therapist even with a valid patient', async () => {
+    await expect(
+      repository.findReadySummaries(SEEDED_PATIENT_ID, randomUUID()),
+    ).resolves.toEqual([]);
+  });
+
   it('returns no summaries for a patient without seeded meetings', async () => {
-    await expect(repository.findReadySummaries(randomUUID())).resolves.toEqual([]);
+    await expect(repository.findReadySummaries(randomUUID(), SEED_USER.id)).resolves.toEqual([]);
   });
 
   it('sweeps only rows stranded in running', async () => {

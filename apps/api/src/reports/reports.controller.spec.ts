@@ -1,9 +1,17 @@
 import { HttpStatus } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { Response } from 'express';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import type { NextMeetingReportDto } from './dto/next-meeting-report.dto';
 import { ReportsController } from './reports.controller';
 import type { ReportsService } from './reports.service';
+
+const USER: AuthenticatedUser = {
+  userId: randomUUID(),
+  email: 'therapist@test.local',
+  fullName: 'Test Therapist',
+  role: 'therapist',
+};
 
 function reportDto(status: NextMeetingReportDto['status']): NextMeetingReportDto {
   return {
@@ -35,7 +43,7 @@ describe('ReportsController', () => {
   it.each(['pending', 'running'] as const)('GET responds 202 while %s', async (status) => {
     const dto = reportDto(status);
     service.getReport.mockResolvedValue(dto);
-    const result = await controller.getReport(dto.patient_id, response as unknown as Response);
+    const result = await controller.getReport(USER, dto.patient_id, response as unknown as Response);
     expect(response.status).toHaveBeenCalledWith(HttpStatus.ACCEPTED);
     expect(result).toBe(dto);
   });
@@ -43,14 +51,14 @@ describe('ReportsController', () => {
   it.each(['ready', 'failed'] as const)('GET responds 200 once %s', async (status) => {
     const dto = reportDto(status);
     service.getReport.mockResolvedValue(dto);
-    await controller.getReport(dto.patient_id, response as unknown as Response);
+    await controller.getReport(USER, dto.patient_id, response as unknown as Response);
     expect(response.status).toHaveBeenCalledWith(HttpStatus.OK);
   });
 
   it('POST dispatches to the service and returns its body', async () => {
     const dto = reportDto('pending');
     service.requestReport.mockResolvedValue(dto);
-    await expect(controller.requestReport(dto.patient_id)).resolves.toBe(dto);
-    expect(service.requestReport).toHaveBeenCalledWith(dto.patient_id);
+    await expect(controller.requestReport(USER, dto.patient_id)).resolves.toBe(dto);
+    expect(service.requestReport).toHaveBeenCalledWith(USER, dto.patient_id);
   });
 });

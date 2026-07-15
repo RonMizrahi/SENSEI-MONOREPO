@@ -20,6 +20,8 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 import type { GenerationStatus } from '../summaries/entities/meeting-summary.entity';
 import { NextMeetingReportDto } from './dto/next-meeting-report.dto';
 import { STATUS_PENDING, STATUS_RUNNING } from './reports.constants';
@@ -49,12 +51,13 @@ export class ReportsController {
   @ApiAcceptedResponse({ type: NextMeetingReportDto, description: 'Generation in progress' })
   @ApiBadRequestResponse({ description: 'patientId is not a UUID' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid Bearer token' })
-  @ApiNotFoundResponse({ description: 'No report was requested for this patient yet' })
+  @ApiNotFoundResponse({ description: 'No report yet (or the patient is not the caller’s)' })
   async getReport(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('patientId', new ParseUUIDPipe()) patientId: string,
     @Res({ passthrough: true }) response: Response,
   ): Promise<NextMeetingReportDto> {
-    const report = await this.reportsService.getReport(patientId);
+    const report = await this.reportsService.getReport(user, patientId);
     response.status(httpStatusFor(report.status));
     return report;
   }
@@ -69,10 +72,11 @@ export class ReportsController {
   @ApiAcceptedResponse({ type: NextMeetingReportDto, description: 'Generation started' })
   @ApiBadRequestResponse({ description: 'patientId is not a UUID' })
   @ApiUnauthorizedResponse({ description: 'Missing or invalid Bearer token' })
-  @ApiNotFoundResponse({ description: 'Patient not found' })
+  @ApiNotFoundResponse({ description: 'Patient not found (or not the caller’s)' })
   requestReport(
+    @CurrentUser() user: AuthenticatedUser,
     @Param('patientId', new ParseUUIDPipe()) patientId: string,
   ): Promise<NextMeetingReportDto> {
-    return this.reportsService.requestReport(patientId);
+    return this.reportsService.requestReport(user, patientId);
   }
 }

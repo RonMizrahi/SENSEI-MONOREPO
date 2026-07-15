@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { CalendarEvent } from '../calendar/entities/calendar-event.entity';
-import { SEED_EVENTS, SEED_PATIENTS } from '../mock/seed';
+import { SEED_EVENTS, SEED_PATIENTS, SEED_USER } from '../mock/seed';
 import { Patient } from '../patients/entities/patient.entity';
 
 /** Injection token for the upload-target lookups (meeting + patient existence). */
@@ -11,12 +11,13 @@ export const UPLOAD_TARGETS_REPOSITORY = Symbol('UPLOAD_TARGETS_REPOSITORY');
 /** The slice of a calendar event the upload flow validates against. */
 export interface UploadMeeting {
   id: string;
+  therapistId: string;
   patientId: string | null;
 }
 
 /** Existence checks for the entities an upload references. */
 export interface UploadTargetsRepository {
-  /** Returns the meeting's id + linked patient, or null when it does not exist. */
+  /** Returns the meeting's id, owner, and linked patient, or null when absent. */
   findMeeting(meetingId: string): Promise<UploadMeeting | null>;
   /** True when a patient with this id exists. */
   patientExists(patientId: string): Promise<boolean>;
@@ -27,12 +28,14 @@ export interface UploadTargetsRepository {
 export class TypeOrmUploadTargetsRepository implements UploadTargetsRepository {
   constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
 
-  /** Loads the meeting row by id, or null when absent. */
+  /** Loads the meeting row (id, owner, patient) by id, or null when absent. */
   async findMeeting(meetingId: string): Promise<UploadMeeting | null> {
     const meeting = await this.dataSource
       .getRepository(CalendarEvent)
       .findOne({ where: { id: meetingId } });
-    return meeting === null ? null : { id: meeting.id, patientId: meeting.patientId };
+    return meeting === null
+      ? null
+      : { id: meeting.id, therapistId: meeting.therapistId, patientId: meeting.patientId };
   }
 
   /** Checks the patients table for the id. */
@@ -44,11 +47,13 @@ export class TypeOrmUploadTargetsRepository implements UploadTargetsRepository {
 /** MOCK_MODE lookups against the shared seed world (no database). */
 @Injectable()
 export class MockUploadTargetsRepository implements UploadTargetsRepository {
-  /** Finds the seeded event by id. */
+  /** Finds the seeded event by id — every seeded meeting is owned by SEED_USER. */
   findMeeting(meetingId: string): Promise<UploadMeeting | null> {
     const event = SEED_EVENTS.find((seeded) => seeded.id === meetingId);
     return Promise.resolve(
-      event === undefined ? null : { id: event.id, patientId: event.patientId },
+      event === undefined
+        ? null
+        : { id: event.id, therapistId: SEED_USER.id, patientId: event.patientId },
     );
   }
 

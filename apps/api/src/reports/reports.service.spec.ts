@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import { ResourceNotFoundException } from '../common/exceptions/app.exception';
 import { PatientReport } from './entities/patient-report.entity';
 import type { GeneratedReport, ReportGenerator } from './report-generator.interface';
@@ -38,12 +39,20 @@ function pendingRow(patientId: string): PatientReport {
 /** Function-property mock shape — keeps expect(mock.method) free of unbound-method lint. */
 type MockedMethods<T> = { [K in keyof T]: jest.Mock };
 
+const makeUser = (userId: string): AuthenticatedUser => ({
+  userId,
+  email: 'therapist@test.local',
+  fullName: 'Test Therapist',
+  role: 'therapist',
+});
+
 describe('ReportsService', () => {
   let repository: MockedMethods<ReportsRepository>;
   let generator: MockedMethods<ReportGenerator>;
   let service: ReportsService;
   let warnSpy: jest.SpyInstance;
   let errorSpy: jest.SpyInstance;
+  const user = makeUser(randomUUID());
   const generated: GeneratedReport = {
     intro: 'מבוא',
     changes: ['שינוי'],
@@ -54,6 +63,7 @@ describe('ReportsService', () => {
   beforeEach(() => {
     repository = {
       patientExists: jest.fn(),
+      therapistHasMeetingWithPatient: jest.fn().mockResolvedValue(true),
       findByPatientId: jest.fn(),
       resetToPending: jest.fn(),
       markRunning: jest.fn().mockResolvedValue(undefined),
@@ -71,9 +81,17 @@ describe('ReportsService', () => {
   afterEach(() => jest.restoreAllMocks());
 
   describe('getReport', () => {
+    it('throws 404 when the caller has no meeting with the patient (never reads the row)', async () => {
+      repository.therapistHasMeetingWithPatient.mockResolvedValue(false);
+      await expect(service.getReport(user, randomUUID())).rejects.toBeInstanceOf(
+        ResourceNotFoundException,
+      );
+      expect(repository.findByPatientId).not.toHaveBeenCalled();
+    });
+
     it('throws 404 when no report row exists', async () => {
       repository.findByPatientId.mockResolvedValue(null);
-      await expect(service.getReport(randomUUID())).rejects.toBeInstanceOf(
+      await expect(service.getReport(user, randomUUID())).rejects.toBeInstanceOf(
         ResourceNotFoundException,
       );
     });
@@ -91,7 +109,7 @@ describe('ReportsService', () => {
       row.model = 'claude-test';
       repository.findByPatientId.mockResolvedValue(row);
 
-      const dto = await service.getReport(patientId);
+      const dto = await service.getReport(user, patientId);
       expect(dto).toEqual({
         patient_id: patientId,
         status: 'ready',
@@ -109,7 +127,7 @@ describe('ReportsService', () => {
     it('maps an empty model to null while pending', async () => {
       const patientId = randomUUID();
       repository.findByPatientId.mockResolvedValue(pendingRow(patientId));
-      const dto = await service.getReport(patientId);
+      const dto = await service.getReport(user, patientId);
       expect(dto.model).toBeNull();
       expect(dto.generated_at).toBeNull();
       expect(dto.status).toBe('pending');
@@ -119,10 +137,31 @@ describe('ReportsService', () => {
   describe('requestReport', () => {
     it('throws 404 for an unknown patient and never touches the row', async () => {
       repository.patientExists.mockResolvedValue(false);
-      await expect(service.requestReport(randomUUID())).rejects.toBeInstanceOf(
+      await expect(service.requestReport(user, randomUUID())).rejects.toBeInstanceOf(
         ResourceNotFoundException,
       );
       expect(repository.resetToPending).not.toHaveBeenCalled();
+    });
+
+    it('throws 404 when the patient exists but the caller has no meeting with them', async () => {
+      repository.patientExists.mockResolvedValue(true);
+      repository.therapistHasMeetingWithPatient.mockResolvedValue(false);
+      await expect(service.requestReport(user, randomUUID())).rejects.toBeInstanceOf(
+        ResourceNotFoundException,
+      );
+      expect(repository.resetToPending).not.toHaveBeenCalled();
+    });
+
+    it('scopes the ready-summary lookup to the calling therapist', async () => {
+      const patientId = randomUUID();
+      repository.patientExists.mockResolvedValue(true);
+      repository.resetToPending.mockResolvedValue(pendingRow(patientId));
+      repository.findReadySummaries.mockResolvedValue([{ meetingId: 'm1', text: 'סיכום' }]);
+      generator.generate.mockResolvedValue(generated);
+
+      await service.requestReport(user, patientId);
+      await flushAsync();
+      expect(repository.findReadySummaries).toHaveBeenCalledWith(patientId, user.userId);
     });
 
     it('returns the pending body and completes generation to ready', async () => {
@@ -135,7 +174,7 @@ describe('ReportsService', () => {
       ]);
       generator.generate.mockResolvedValue(generated);
 
-      const dto = await service.requestReport(patientId);
+      const dto = await service.requestReport(user, patientId);
       expect(dto.status).toBe('pending');
       expect(dto.patient_id).toBe(patientId);
 
@@ -164,7 +203,7 @@ describe('ReportsService', () => {
       repository.findReadySummaries.mockResolvedValue([{ meetingId: 'm1', text: longText }]);
       generator.generate.mockResolvedValue(generated);
 
-      await service.requestReport(patientId);
+      await service.requestReport(user, patientId);
       await flushAsync();
       expect(repository.markReady).toHaveBeenCalledWith(
         patientId,
@@ -180,7 +219,7 @@ describe('ReportsService', () => {
       repository.resetToPending.mockResolvedValue(pendingRow(patientId));
       repository.findReadySummaries.mockResolvedValue([]);
 
-      await service.requestReport(patientId);
+      await service.requestReport(user, patientId);
       await flushAsync();
       expect(repository.markFailed).toHaveBeenCalledWith(patientId, NO_SUMMARIES_ERROR);
       expect(repository.markRunning).not.toHaveBeenCalled();
@@ -194,7 +233,7 @@ describe('ReportsService', () => {
       repository.findReadySummaries.mockResolvedValue([{ meetingId: 'm1', text: 'סיכום' }]);
       generator.generate.mockRejectedValue(new Error('anthropic exploded'));
 
-      await service.requestReport(patientId);
+      await service.requestReport(user, patientId);
       await flushAsync();
       expect(repository.markFailed).toHaveBeenCalledWith(patientId, 'anthropic exploded');
     });
@@ -207,7 +246,7 @@ describe('ReportsService', () => {
       generator.generate.mockResolvedValue(generated);
       repository.markReady.mockRejectedValue(new Error('db write failed'));
 
-      await service.requestReport(patientId);
+      await service.requestReport(user, patientId);
       await flushAsync();
       expect(repository.markFailed).toHaveBeenCalledWith(patientId, 'db write failed');
     });
@@ -224,9 +263,9 @@ describe('ReportsService', () => {
         )
         .mockResolvedValue(generated);
 
-      await service.requestReport(patientId); // run 1 — hangs on the generator
+      await service.requestReport(user, patientId); // run 1 — hangs on the generator
       await flushAsync();
-      await service.requestReport(patientId); // run 2 — supersedes and settles
+      await service.requestReport(user, patientId); // run 2 — supersedes and settles
       await flushAsync();
       expect(repository.markReady).toHaveBeenCalledTimes(1);
 
@@ -243,7 +282,7 @@ describe('ReportsService', () => {
       repository.findReadySummaries.mockRejectedValue(new Error('db down'));
       repository.markFailed.mockRejectedValue(new Error('db still down'));
 
-      await expect(service.requestReport(patientId)).resolves.toMatchObject({
+      await expect(service.requestReport(user, patientId)).resolves.toMatchObject({
         status: 'pending',
       });
       await flushAsync();

@@ -61,24 +61,55 @@ describe('audio (integration)', () => {
   let dataSource: DataSource;
   let token: string;
   let therapistId: string;
+  let otherToken: string;
+  let otherTherapistId: string;
   let patientId: string;
   let otherPatientId: string;
   let fetchSpy: jest.SpyInstance;
   let scribeResponse: () => Response;
   let throttlerStorage: ThrottlerStorageService;
 
-  /** Inserts a calendar event for the seeded therapist and returns its id. */
-  async function createMeeting(linkedPatientId: string | null): Promise<string> {
+  /** Inserts a users row + signs a Bearer token for it (auth unit built in parallel). */
+  async function seedTherapist(): Promise<{ token: string; id: string }> {
+    const therapist = await dataSource.getRepository(User).save({
+      authType: 'password',
+      role: 'therapist',
+      email: `it-${randomUUID()}@test.local`,
+      fullName: 'Integration Therapist',
+      passwordHash: 'irrelevant-for-jwt-auth',
+      tokenVersion: 0,
+    });
+    const payload: JwtPayload = {
+      sub: therapist.id,
+      email: therapist.email,
+      full_name: therapist.fullName,
+      auth_type: therapist.authType,
+      role: therapist.role,
+      token_version: therapist.tokenVersion,
+    };
+    return { token: testApp.app.get(JwtService).sign(payload), id: therapist.id };
+  }
+
+  /** Inserts a calendar event owned by the given therapist and returns its id. */
+  async function createMeetingFor(
+    ownerTherapistId: string,
+    linkedPatientId: string | null,
+  ): Promise<string> {
     const now = Date.now();
     const meeting = await dataSource.getRepository(CalendarEvent).save({
       title: `פגישה ${randomUUID()}`,
       description: null,
       startAt: new Date(now),
       endAt: new Date(now + HOUR_MS),
-      therapistId,
+      therapistId: ownerTherapistId,
       patientId: linkedPatientId,
     });
     return meeting.id;
+  }
+
+  /** Inserts a calendar event for the primary seeded therapist and returns its id. */
+  function createMeeting(linkedPatientId: string | null): Promise<string> {
+    return createMeetingFor(therapistId, linkedPatientId);
   }
 
   function uploadRequest(meetingId?: string): request.Test {
@@ -115,24 +146,8 @@ describe('audio (integration)', () => {
       await dataSource.query(migrationSql);
     }
 
-    const therapist = await dataSource.getRepository(User).save({
-      authType: 'password',
-      role: 'therapist',
-      email: `it-${randomUUID()}@test.local`,
-      fullName: 'Integration Therapist',
-      passwordHash: 'irrelevant-for-jwt-auth',
-      tokenVersion: 0,
-    });
-    therapistId = therapist.id;
-    const payload: JwtPayload = {
-      sub: therapist.id,
-      email: therapist.email,
-      full_name: therapist.fullName,
-      auth_type: therapist.authType,
-      role: therapist.role,
-      token_version: therapist.tokenVersion,
-    };
-    token = testApp.app.get(JwtService).sign(payload);
+    ({ token, id: therapistId } = await seedTherapist());
+    ({ token: otherToken, id: otherTherapistId } = await seedTherapist());
 
     const patients = dataSource.getRepository(Patient);
     patientId = (await patients.save({ name: 'דנה לוי', phone: '054-1234567', email: null })).id;
@@ -278,6 +293,46 @@ describe('audio (integration)', () => {
         .attach('file', Buffer.from('tiny'), { filename: 'a.mp3', contentType: 'audio/mpeg' })
         .field('meeting_id', randomUUID())
         .expect(401);
+    });
+  });
+
+  describe('cross-therapist isolation (IDOR)', () => {
+    /** Therapist B must never act on a meeting owned by therapist A. */
+    it('404s when uploading against another therapist’s meeting (no transcript written)', async () => {
+      const ownedByA = await createMeetingFor(therapistId, null);
+      await request(testApp.httpServer)
+        .post('/audio/upload')
+        .set('Authorization', `Bearer ${otherToken}`)
+        .attach('file', Buffer.from('tiny-mp3-bytes'), {
+          filename: 'session.mp3',
+          contentType: 'audio/mpeg',
+        })
+        .field('meeting_id', ownedByA)
+        .expect(404);
+
+      // The foreign meeting stays untranscribed — owner A can still upload.
+      await request(testApp.httpServer)
+        .post('/audio/upload')
+        .set('Authorization', `Bearer ${token}`)
+        .attach('file', Buffer.from('tiny-mp3-bytes'), {
+          filename: 'session.mp3',
+          contentType: 'audio/mpeg',
+        })
+        .field('meeting_id', ownedByA)
+        .expect(201);
+    });
+
+    it('lets the owner upload against their own meeting (positive control)', async () => {
+      const ownedByB = await createMeetingFor(otherTherapistId, null);
+      await request(testApp.httpServer)
+        .post('/audio/upload')
+        .set('Authorization', `Bearer ${otherToken}`)
+        .attach('file', Buffer.from('tiny-mp3-bytes'), {
+          filename: 'session.mp3',
+          contentType: 'audio/mpeg',
+        })
+        .field('meeting_id', ownedByB)
+        .expect(201);
     });
   });
 
