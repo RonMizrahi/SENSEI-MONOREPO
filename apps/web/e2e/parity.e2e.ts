@@ -5,24 +5,30 @@ import { test, expect, type Page } from '@playwright/test';
 
 const SEEDED_NOTIFICATION_COUNT = 9;
 
-/** Enters the app via the demo button (which acquires a live API token) and waits for it. */
+/** Enters the app via the demo button and lets the API auth settle. */
 async function demoLogin(page: Page): Promise<void> {
   await page.goto('/');
   const demoBtn = page.locator('.auth-demo-btn');
   if (await demoBtn.isVisible().catch(() => false)) {
     await demoBtn.click();
   }
-  // The demo flow calls ensureDemoApiAuth(); wait until the token is stored so
-  // subsequent guarded fetches hit the backend rather than 401 → demo fallback.
-  await page.waitForFunction(
-    () =>
-      !!(
-        localStorage.getItem('sensei_api_access_token_v1') ||
-        sessionStorage.getItem('sensei_api_access_token_v1')
-      ),
-    undefined,
-    { timeout: 20_000 },
-  );
+  // Best-effort token wait: a real (secured) backend stores a Bearer token via
+  // ensureDemoApiAuth — wait for it so the next fetch carries it. MOCK_MODE serves
+  // guarded routes anonymously (injected TEST_USER), so no token is ever stored —
+  // don't block on it; the per-test response assertions prove the backend was served.
+  await page
+    .waitForFunction(
+      () =>
+        !!(
+          localStorage.getItem('sensei_api_access_token_v1') ||
+          sessionStorage.getItem('sensei_api_access_token_v1')
+        ),
+      undefined,
+      { timeout: 8_000 },
+    )
+    .catch(() => undefined);
+  // Ensure we're actually in the app before navigating on.
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible({ timeout: 15_000 });
 }
 
 test('calendar is served by GET /calendar after demo login', async ({ page }) => {
