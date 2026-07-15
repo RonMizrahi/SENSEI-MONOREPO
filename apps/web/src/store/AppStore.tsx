@@ -13,6 +13,7 @@ import { isApiConfigured } from '../services/apiClient';
 import {
   clearApiAccessToken,
   ensureDemoApiAuth,
+  getApiAccessToken,
   installApiAuthTokenProvider,
 } from '../services/apiAuth';
 import { loadPatientsWithFallback } from '../services/patients';
@@ -394,8 +395,10 @@ export function AppStoreProvider({ children }: { children: React.ReactNode }) {
     if (st0.view !== 'auth') window.history.replaceState(null, '', routeToHash(st0.route, st0.patientId, st0.sessionNum));
     const startPatientSync = () => syncPatients(st0.patients || []);
     if (st0.view === 'app') {
-      // Restored demo mode still needs a live API token when security is enabled.
-      if (st0.demoMode && isApiConfigured()) {
+      // Any restored app session needs a live API token when the backend is wired —
+      // not just demo mode, so a persisted session sources real data (not the demo
+      // fallback) after a reload. No-ops when a token already exists.
+      if (isApiConfigured() && !getApiAccessToken()) {
         void ensureDemoApiAuth().finally(startPatientSync);
       } else {
         startPatientSync();

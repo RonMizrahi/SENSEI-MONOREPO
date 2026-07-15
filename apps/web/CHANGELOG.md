@@ -19,6 +19,9 @@ notifications, profile, settings, and clinical notes; the summary carries an
 - **Clinical notes** load from and save to `/patients/:id/notes`, so both the
   patient page and the generated letter reflect the stored note.
 - **Therapist profile** loads from and saves to `/auth/me`.
+- **Restored sessions acquire a live API token** on boot when the backend is
+  wired (previously only demo-mode did), so a persisted session sources real data
+  instead of silently falling back to the demo copy.
 
 Session-detail / transcript wiring (which needs the SPA's locally-generated
 sessions mapped to real meeting ids) is tracked as a follow-up; the backend
