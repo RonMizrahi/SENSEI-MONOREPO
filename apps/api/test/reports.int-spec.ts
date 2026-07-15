@@ -4,7 +4,7 @@ import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
-import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
+import { provisionDatabase, type ProvisionedDatabase } from './utils/shared-postgres';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -67,13 +67,13 @@ function applyEnv(overrides: Record<string, string>): () => void {
  * Boots the full app against the container with the report generator stubbed.
  * Local variant of test/utils createIntegrationApp (frozen) — needed for overrideProvider.
  */
-async function bootAppWithStub(container: StartedPostgreSqlContainer): Promise<{
+async function bootAppWithStub(databaseUri: string): Promise<{
   app: INestApplication;
   restore: () => void;
 }> {
   const restore = applyEnv({
     MOCK_MODE: 'false',
-    DATABASE_URL: container.getConnectionUri(),
+    DATABASE_URL: databaseUri,
     LOG_LEVEL: 'fatal',
   });
   // import AFTER env is set — module composition reads MOCK_MODE at import time
@@ -137,7 +137,7 @@ async function createTherapist(
 }
 
 describe('reports (integration)', () => {
-  let container: StartedPostgreSqlContainer;
+  let database: ProvisionedDatabase;
   let app: INestApplication;
   let restore: () => void;
   let httpServer: App;
@@ -211,8 +211,8 @@ describe('reports (integration)', () => {
   }
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer('postgres:18-alpine').start();
-    ({ app, restore } = await bootAppWithStub(container));
+    database = await provisionDatabase();
+    ({ app, restore } = await bootAppWithStub(database.uri));
     httpServer = app.getHttpServer() as App;
     dataSource = app.get(DataSource);
     throttlerStorage = app.get<ThrottlerStorageService>(ThrottlerStorage);
@@ -228,8 +228,8 @@ describe('reports (integration)', () => {
 
   afterAll(async () => {
     await app.close();
-    await container.stop();
     restore();
+    await database.drop();
   });
 
   it('rejects unauthenticated requests', async () => {

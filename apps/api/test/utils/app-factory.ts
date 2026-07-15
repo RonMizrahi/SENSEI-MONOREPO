@@ -1,9 +1,9 @@
 import { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
-import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { configureApp } from '../../src/app.setup';
+import { provisionDatabase } from './shared-postgres';
 
 const DEFAULT_TEST_PASSWORD = 'test-password-1234';
 
@@ -12,8 +12,9 @@ export interface TestApp {
   app: INestApplication;
   /** Typed HTTP server handle for supertest. */
   httpServer: App;
-  container?: StartedPostgreSqlContainer;
-  /** Stops the app (and the Postgres container when one was started). */
+  /** The database URI this app booted against (reuse it to re-boot the same DB). */
+  databaseUrl: string;
+  /** Stops the app and drops this suite's isolated database (no-op drop when reusing). */
   close(): Promise<void>;
 }
 
@@ -56,10 +57,12 @@ async function bootApp(): Promise<INestApplication> {
  * @param env Extra env overrides applied before module composition.
  */
 export async function createIntegrationApp(env: Record<string, string> = {}): Promise<TestApp> {
-  const container = await new PostgreSqlContainer('postgres:18-alpine').start();
+  // Reuse a caller-supplied DATABASE_URL (re-boot the same DB); otherwise provision a fresh one.
+  const database = env.DATABASE_URL ? null : await provisionDatabase();
+  const databaseUrl = env.DATABASE_URL ?? database!.uri;
   const restore = applyEnv({
     MOCK_MODE: 'false',
-    DATABASE_URL: container.getConnectionUri(),
+    DATABASE_URL: databaseUrl,
     LOG_LEVEL: 'fatal',
     ...env,
   });
@@ -67,11 +70,11 @@ export async function createIntegrationApp(env: Record<string, string> = {}): Pr
   return {
     app,
     httpServer: app.getHttpServer() as App,
-    container,
+    databaseUrl,
     close: async () => {
       await app.close();
-      await container.stop();
       restore();
+      if (database) await database.drop();
     },
   };
 }

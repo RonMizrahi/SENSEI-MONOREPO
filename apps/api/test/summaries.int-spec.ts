@@ -5,7 +5,6 @@ import { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
-import { PostgreSqlContainer, StartedPostgreSqlContainer } from '@testcontainers/postgresql';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import request from 'supertest';
@@ -13,6 +12,7 @@ import type { App } from 'supertest/types';
 import { DataSource } from 'typeorm';
 import { z } from 'zod';
 import { configureApp } from '../src/app.setup';
+import { provisionDatabase, type ProvisionedDatabase } from './utils/shared-postgres';
 import { SUMMARIZER } from '../src/summaries/summarizer.interface';
 import type { Summarizer, SummaryResult } from '../src/summaries/summarizer.interface';
 import { TRANSCRIPT_READER } from '../src/transcripts/transcript-reader';
@@ -43,7 +43,7 @@ const summarySchema = z.object({
 });
 
 describe('summaries (integration)', () => {
-  let container: StartedPostgreSqlContainer;
+  let database: ProvisionedDatabase;
   let app: INestApplication;
   let httpServer: App;
   let dataSource: DataSource;
@@ -67,10 +67,10 @@ describe('summaries (integration)', () => {
   };
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer('postgres:18-alpine').start();
+    database = await provisionDatabase();
     for (const [key, value] of Object.entries({
       MOCK_MODE: 'false',
-      DATABASE_URL: container.getConnectionUri(),
+      DATABASE_URL: database.uri,
       LOG_LEVEL: 'fatal',
     })) {
       previousEnv.set(key, process.env[key]);
@@ -105,7 +105,7 @@ describe('summaries (integration)', () => {
 
   afterAll(async () => {
     await app.close();
-    await container.stop();
+    await database.drop();
     for (const [key, value] of previousEnv) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;

@@ -49,12 +49,11 @@ describe('db migration runner (integration)', () => {
     if (secondApp) {
       await secondApp.close();
     }
-    if (firstApp) {
-      if (!firstAppStopped) {
-        await firstApp.app.close();
-      }
-      await firstApp.container?.stop();
+    if (firstApp && !firstAppStopped) {
+      await firstApp.app.close();
     }
+    // firstApp's provisioned database is reclaimed when global-teardown stops the
+    // shared container (its app was closed manually to keep the DB alive for re-boot).
     for (const [key, value] of originalEnv) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
@@ -74,10 +73,10 @@ describe('db migration runner (integration)', () => {
   });
 
   it('re-boot on the same database succeeds and records nothing new', async () => {
-    if (!firstApp?.container) throw new Error('expected the first app to own a Postgres container');
-    const databaseUrl = firstApp.container.getConnectionUri();
+    if (!firstApp) throw new Error('first app did not boot');
+    const databaseUrl = firstApp.databaseUrl;
 
-    // stop only the app; keep the container (and its applied schema) alive
+    // stop only the app; keep the database (and its applied schema) alive
     await firstApp.app.close();
     firstAppStopped = true;
 
