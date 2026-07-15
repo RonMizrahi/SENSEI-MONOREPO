@@ -7,11 +7,15 @@ import { createIntegrationApp, TestApp } from './utils/app-factory';
 const INIT_MIGRATION = '0001_init.sql';
 const REPORTS_PER_THERAPIST_MIGRATION = '0002_patient_reports_per_therapist.sql';
 const SEED_DEMO_PROTOTYPE_MIGRATION = '0003_seed_demo_prototype.sql';
-// Every versioned SQL file the boot-time runner applies, in filename order.
+const SEED_DEMO_IDENTITY_MIGRATION = '0004_seed_demo_identity.sql';
+// Every versioned SQL file the boot-time runner applies, in filename order. Seed
+// migrations apply (and are tracked) in every env; their inserts are gated by
+// SEED_DEMO_DATA, so this list is identical across dev and prod.
 const EXPECTED_MIGRATIONS = [
   INIT_MIGRATION,
   REPORTS_PER_THERAPIST_MIGRATION,
   SEED_DEMO_PROTOTYPE_MIGRATION,
+  SEED_DEMO_IDENTITY_MIGRATION,
 ];
 const EXPECTED_TABLES = [
   '_migrations',
@@ -42,6 +46,12 @@ async function listAppliedMigrations(dataSource: DataSource): Promise<string[]> 
     'SELECT name FROM _migrations ORDER BY applied_at',
   );
   return rows.map((row) => row.name);
+}
+
+/** Counts rows in a table (identifier is a trusted test constant, not user input). */
+async function countRows(dataSource: DataSource, table: string): Promise<number> {
+  const rows = await dataSource.query<{ count: string }[]>(`SELECT count(*) AS count FROM ${table}`);
+  return Number(rows[0]?.count ?? 0);
 }
 
 describe('db migration runner (integration)', () => {
@@ -78,6 +88,18 @@ describe('db migration runner (integration)', () => {
     }
 
     await expect(listAppliedMigrations(dataSource)).resolves.toEqual(EXPECTED_MIGRATIONS);
+  });
+
+  it('demo-seed gate off (default): seed migrations apply but insert no gated rows', async () => {
+    if (!firstApp) throw new Error('first app did not boot');
+    const dataSource = firstApp.app.get(DataSource);
+    // SEED_DEMO_DATA is unset here, so 0004's guarded inserts affect 0 rows:
+    // no demo therapist and no seeded appointments reach a production-shaped DB.
+    await expect(countRows(dataSource, 'users')).resolves.toBe(0);
+    await expect(countRows(dataSource, 'calendar_events')).resolves.toBe(0);
+    // 0003 seeds the 4 demo patients UNCONDITIONALLY (not gated) — lock that contract
+    // so a future guard added/removed on 0003 can't silently flip it.
+    await expect(countRows(dataSource, 'patients')).resolves.toBe(4);
   });
 
   it('re-boot on the same database succeeds and records nothing new', async () => {

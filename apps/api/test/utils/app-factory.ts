@@ -64,6 +64,9 @@ export async function createIntegrationApp(env: Record<string, string> = {}): Pr
     MOCK_MODE: 'false',
     DATABASE_URL: databaseUrl,
     LOG_LEVEL: 'fatal',
+    // Deterministic gate: never inherit the developer's .env SEED_DEMO_DATA. Tests
+    // that want the demo seed pass SEED_DEMO_DATA: 'true' explicitly (it wins here).
+    SEED_DEMO_DATA: 'false',
     ...env,
   });
   const app = await bootApp();
