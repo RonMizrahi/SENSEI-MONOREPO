@@ -173,7 +173,7 @@ Steps:
 | M4 Profile + settings | BACKEND DONE | users profile cols + user_settings; GET/PATCH /auth/me + GET/PUT /settings; seeded. Live. |
 | M5 Reports + notes + letters | BACKEND DONE | patient_reports.questions + seed; patient_notes + GET/PUT + seed. Letters = derived (no table). Live. |
 | M-FE Consolidated SPA wiring | MOSTLY DONE | Wired to live API: report questions, notification center (read/archived via PATCH), clinical notes (patient + letter), therapist profile. Full service layer (transcripts/notifications/profile/settings/notes) + summary `insight`/report `questions` fields. web 1.2.0, 368 tests + build green. **Deferred:** SessionDetail/Transcript (needs the SPA's local sessions mapped to real meeting ids) and settings-prefs sync (theme/a11y equal SPA defaults → no visible change) — services already in place. |
-| M6 Integration + QA + close-out | IN PROGRESS | Backend live-verified on Supabase throughout; root CLAUDE.md updated; single PR. QA (qa-engineer) + Gate B recommended as the acceptance gate. |
+| M6 Integration + QA + close-out | DONE (QA recommended) | Assembled + live-verified in-browser (SPA sources backend notifications/profile). Root CLAUDE.md updated; **PR #12 open, CI `verify` green**. Independent qa-engineer pass + Gate B holistic review recommended before merge. |
 
 **Backend complete (M1–M5):** all APIs + gated seeds land migrations 0004–0012; 401 unit
 + 103 integration green; every endpoint live-verified against the dev Supabase. Remaining:
