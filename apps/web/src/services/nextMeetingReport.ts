@@ -9,6 +9,7 @@ export interface NextMeetingReport {
   intro?: string | null
   changes?: string[] | null
   open_topics?: string[] | null
+  questions?: string[] | null
   source_meeting_ids?: string[] | null
   last_summary_excerpt?: string | null
   generated_at?: string | null

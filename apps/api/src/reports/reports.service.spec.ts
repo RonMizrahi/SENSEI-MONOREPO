@@ -116,6 +116,7 @@ describe('ReportsService', () => {
         intro: 'מבוא',
         changes: ['שינוי'],
         open_topics: ['נושא'],
+        questions: [],
         source_meeting_ids: ['m1'],
         last_summary_excerpt: 'תקציר',
         generated_at: '2026-07-14T10:00:00.000Z',

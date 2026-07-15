@@ -1,5 +1,8 @@
 // Patient detail — profile, clinical notes, upcoming meetings, meeting history preview.
+import { useEffect } from 'react';
 import { useApp } from '../store/AppStore';
+import { isApiConfigured } from '../services/apiClient';
+import { fetchPatientNote, savePatientNote } from '../services/notes';
 import { avatarColors } from '../utils';
 import { buildPatientSessions, enrichPatientSessions } from '../utils/patientSessions';
 import PatientSessionList from '../components/patient/PatientSessionList';
@@ -35,6 +38,20 @@ export default function PatientPage() {
   const defaultNotes = () => 'מטופל בטיפול. מוטיבציה גבוהה ושיתוף פעולה. הומלץ על המשך מעקב שבועי ועבודה על כלי ויסות.';
   const cpNotes = S.notesOverrides[cp.id] !== undefined ? S.notesOverrides[cp.id] : defaultNotes();
 
+  // When wired to a backend, load this patient's stored clinical note into the
+  // store so both this page and the letter reflect it (demo mode keeps the local
+  // note). Skips while the user is mid-edit so it never clobbers a draft.
+  const apiMode = isApiConfigured();
+  useEffect(() => {
+    if (!apiMode || !cp.id || S.editingNotes) return undefined;
+    const ac = new AbortController();
+    fetchPatientNote(cp.id, ac.signal)
+      .then((n) => { if (n.body) set((s: any) => ({ notesOverrides: { ...s.notesOverrides, [cp.id]: n.body } })); })
+      .catch(() => { /* keep the local/default note */ });
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode, cp.id]);
+
   const cpInfo = [
     { k: 'טלפון', v: cp.phone, dir: 'ltr' as const },
     { k: 'דוא״ל', v: displayPatientEmail(cp.email), dir: 'ltr' as const },
@@ -51,7 +68,13 @@ export default function PatientPage() {
   };
   const startEditNotes = () => set({ editingNotes: true, notesDraft: cpNotes });
   const onNotesDraft = (e: any) => set({ notesDraft: e.target.value, notesDrafts: { ...S.notesDrafts, [cp.id]: e.target.value } });
-  const saveNotes = () => { const d = { ...S.notesDrafts }; delete d[cp.id]; set({ notesOverrides: { ...S.notesOverrides, [cp.id]: S.notesDraft }, editingNotes: false, notesDrafts: d }); toast('ההערות הקליניות נשמרו'); };
+  const saveNotes = () => {
+    const d = { ...S.notesDrafts }; delete d[cp.id];
+    const body = S.notesDraft;
+    set({ notesOverrides: { ...S.notesOverrides, [cp.id]: body }, editingNotes: false, notesDrafts: d });
+    if (apiMode) savePatientNote(cp.id, body).catch(() => { /* optimistic; UI already updated */ });
+    toast('ההערות הקליניות נשמרו');
+  };
   const cancelNotes = () => clearNotesDraft({ editingNotes: false });
   const recoveredNotes = S.notesDrafts[cp.id];
   const hasRecoverableNotes = !S.editingNotes && recoveredNotes != null && recoveredNotes.trim() !== '' && recoveredNotes !== cpNotes;

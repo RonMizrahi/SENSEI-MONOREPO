@@ -3,7 +3,12 @@ import { randomUUID } from 'node:crypto';
 import { SEED_USER } from '../mock/seed';
 import { User } from './entities/user.entity';
 import { PasswordService } from './password.service';
-import type { CreateUserFields, UserRepository } from './user.repository';
+import {
+  definedProfileFields,
+  type CreateUserFields,
+  type UpdateProfileFields,
+  type UserRepository,
+} from './user.repository';
 
 /**
  * Seeded in-memory user store for MOCK_MODE — the demo therapist (SEED_USER)
@@ -57,6 +62,15 @@ export class UserMockRepository implements UserRepository {
   async findById(id: string): Promise<User | null> {
     await this.seeded;
     return this.usersById.get(id) ?? null;
+  }
+
+  /** Applies profile field updates; returns the updated user or null when missing. */
+  async updateProfile(id: string, fields: UpdateProfileFields): Promise<User | null> {
+    await this.seeded;
+    const user = this.usersById.get(id);
+    if (!user) return null;
+    Object.assign(user, definedProfileFields(fields));
+    return user;
   }
 
   /** Bumps token_version; false when the user is missing. */

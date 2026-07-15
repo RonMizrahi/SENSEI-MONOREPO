@@ -9,6 +9,8 @@ export interface MeetingSummary {
   text?: string | null
   model?: string | null
   error?: string | null
+  /** Short per-session clinical insight shown on the session-detail screen. */
+  insight?: string | null
 }
 
 const POLL_MS = 2000;

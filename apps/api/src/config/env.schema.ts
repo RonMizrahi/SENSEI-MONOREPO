@@ -14,6 +14,13 @@ export const envSchema = z.object({
   // MOCK_MODE=true serves seeded in-memory data — no database or AI keys required.
   // Also read at module-composition time by src/common/mock-mode.ts (before Zod runs).
   MOCK_MODE: z.stringbool().default(false),
+  // Gates the demo-data seed migrations (patients/calendar/sessions/etc.). When false
+  // the seed files still apply and are tracked, but their guarded inserts affect 0 rows
+  // — so production stays clean while dev/demo databases get the full mock world.
+  // Takes effect only on a database's FIRST application of each seed file: once a seed
+  // migration is recorded in _migrations it never re-runs, so flipping this later won't
+  // retroactively seed an already-migrated database.
+  SEED_DEMO_DATA: z.stringbool().default(false),
   DATABASE_URL: z.string().default('postgres://app:app@localhost:5432/app'),
   JWT_SECRET: z.string().min(JWT_SECRET_MIN_LENGTH).default('dev-only-secret-change-me-32-chars!!'),
   JWT_EXPIRES_IN: z.string().default('30d'),

@@ -1,6 +1,6 @@
 # Sensei — Therapist Management App (Frontend)
 
-**Version:** 1.1.0 · **Stack:** Vite · React 18 · TypeScript · Hebrew RTL
+**Version:** 1.2.0 · **Stack:** Vite · React 18 · TypeScript · Hebrew RTL
 
 Sensei is a Hebrew-only, RTL, AI-assisted practice-management app for licensed therapists —
 the production React frontend built from the *"Sensei design 2026"* high-fidelity prototype

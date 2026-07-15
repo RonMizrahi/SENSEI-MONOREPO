@@ -5,15 +5,19 @@ import { Transcript } from './entities/transcript.entity';
 import { MockTranscriptsRepository } from './mock-transcripts.repository';
 import { TRANSCRIPT_READER } from './transcript-reader';
 import { TRANSCRIPT_STORE, type TranscriptStore } from './transcript-store';
+import { TranscriptsController } from './transcripts.controller';
+import { TranscriptsQueryService } from './transcripts-query.service';
 import { TranscriptsRepository } from './transcripts.repository';
 
 /**
- * Transcript persistence — TypeORM-backed in real mode, in-memory in MOCK_MODE.
- * TRANSCRIPT_READER (frozen seam, consumed by summaries) resolves to the same
- * instance as the read/write TRANSCRIPT_STORE used by the audio upload flow.
+ * Transcript persistence + reads — TypeORM-backed in real mode, in-memory in
+ * MOCK_MODE. TRANSCRIPT_READER (frozen seam, consumed by summaries) resolves to
+ * the same instance as the read/write TRANSCRIPT_STORE used by the audio upload
+ * flow; TranscriptsController exposes the therapist-scoped read endpoint.
  */
 @Module({
   imports: [...(isMockMode() ? [] : [TypeOrmModule.forFeature([Transcript])])],
+  controllers: [TranscriptsController],
   providers: [
     provideMockSwappable<TranscriptStore>(
       TRANSCRIPT_STORE,
@@ -21,6 +25,7 @@ import { TranscriptsRepository } from './transcripts.repository';
       MockTranscriptsRepository,
     ),
     { provide: TRANSCRIPT_READER, useExisting: TRANSCRIPT_STORE },
+    TranscriptsQueryService,
   ],
   exports: [TRANSCRIPT_READER, TRANSCRIPT_STORE],
 })

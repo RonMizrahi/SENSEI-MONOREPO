@@ -57,6 +57,18 @@ is the single source of truth for env vars (`.env.example` mirrors it). Read
 config via `ConfigService` only, never `process.env` (sole exception:
 `isMockMode()` at module-composition time).
 
+**Demo-data seeding (`SEED_DEMO_DATA`).** The demo Hebrew world is seeded into the
+DB by gated migrations: the runner sets a transaction-local `app.seed_demo` GUC
+from `SEED_DEMO_DATA` (default false), and each `*_seed_*` migration guards its
+inserts with `current_setting('app.seed_demo', true) = 'true'` — so seed files
+apply and are tracked in every env but insert 0 rows in prod. Modules added for
+full mock parity: `src/notifications/` (notifications table), `src/settings/`
+(user_settings preferences blob → `GET/PUT /settings`), `src/notes/`
+(patient_notes → `GET/PUT /patients/:id/notes`); plus `GET /auth/me` + `PATCH
+/auth/me`, `GET /meetings/:id/transcript`, `patient_reports.questions`, and
+`meeting_summaries.insight`. The SPA (`apps/web` ≥ 1.2.0) wires these when
+`VITE_API_BASE_URL` is set. See `docs/plans/mock-parity-backend-15-07-2026-plan.md`.
+
 ## Binding conventions
 
 - **The frontend contract wins.** Routes are **unversioned** (no `/v1`) and JSON

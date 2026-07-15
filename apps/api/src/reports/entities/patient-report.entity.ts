@@ -39,6 +39,9 @@ export class PatientReport {
   @Column({ name: 'open_topics', type: 'jsonb', default: () => "'[]'" })
   openTopics!: string[];
 
+  @Column({ type: 'jsonb', default: () => "'[]'" })
+  questions!: string[];
+
   @Column({ name: 'source_meeting_ids', type: 'jsonb', default: () => "'[]'" })
   sourceMeetingIds!: string[];
 

@@ -2,6 +2,31 @@
 
 Format follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.2.0] — 2026-07-15
+
+### Added — live backend wiring (mock-parity)
+
+The `src/services/` API layer now connects to the Sensei backend when
+`VITE_API_BASE_URL` is set — the standalone demo experience (seed data +
+localStorage) is unchanged when it is unset. New/extended clients: transcripts,
+notifications, profile, settings, and clinical notes; the summary carries an
+`insight` field and the report carries `questions`.
+
+- **Report suggested questions** come from the live next-meeting report (falls
+  back to the demo copy when the report has none).
+- **Notification center** sources its feed from `GET /notifications`, with
+  read/archived driven by the API and persisted via `PATCH` (optimistic).
+- **Clinical notes** load from and save to `/patients/:id/notes`, so both the
+  patient page and the generated letter reflect the stored note.
+- **Therapist profile** loads from and saves to `/auth/me`.
+- **Restored sessions acquire a live API token** on boot when the backend is
+  wired (previously only demo-mode did), so a persisted session sources real data
+  instead of silently falling back to the demo copy.
+
+Session-detail / transcript wiring (which needs the SPA's locally-generated
+sessions mapped to real meeting ids) is tracked as a follow-up; the backend
+transcript endpoint + client are already in place.
+
 ## [1.1.0] — 2026-07-14
 
 ### Added — calendar week-view home + mobile-experience foundation (new-ui)

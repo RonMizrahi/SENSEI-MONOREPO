@@ -34,6 +34,7 @@ describe('useNextMeetingReport', () => {
     (pollNextMeetingReport as any).mockResolvedValue({
       patient_id: 'p1', status: 'ready',
       intro: 'LIVE INTRO', changes: ['live change'], open_topics: ['live topic'],
+      questions: ['live question'],
       last_summary_excerpt: 'LIVE EXCERPT',
     });
     const { result } = renderHook(() => useNextMeetingReport('p1', 'דנה לוי', 'DEMO SUMMARY', 'DEMO INSIGHT'));
@@ -43,7 +44,7 @@ describe('useNextMeetingReport', () => {
     expect(result.current.openTopics).toEqual(['live topic']);
     expect(result.current.summary).toBe('LIVE EXCERPT');
     expect(result.current.insight).toBe('LIVE EXCERPT');
-    expect(result.current.questions).toEqual([]); // hidden once a live report is ready
+    expect(result.current.questions).toEqual(['live question']); // live report questions (M5)
     expect(result.current.loading).toBe(false);
     expect(pollNextMeetingReport).toHaveBeenCalledWith('p1', expect.any(Object));
   });

@@ -1,9 +1,19 @@
 // Notification center — ported from 'Sensei demo.dc.html'
 // (template lines 1354–1429 · logic: renderVals notification-center section ~4400–4490).
+import { useMemo } from 'react';
 import { useApp } from '../store/AppStore';
+import { useNotifications, type FeedNotification } from '../hooks/useNotifications';
+import { updateNotification } from '../services/notifications';
 import { CARD_SHADOW } from '../utils/styles';
 import './notifications.css';
 import { NOTIFS } from '../data/catalogs';
+
+// Demo feed (read/archived tracked in the store in demo mode; the API supplies
+// its own read/archived per row when configured).
+const DEMO_FEED: FeedNotification[] = NOTIFS.map((n) => ({
+  id: n.id, kind: n.kind, title: n.title, text: n.text, time: n.time, group: n.group,
+  pid: n.pid ?? null, read: false, archived: false,
+}));
 
 // Static notification feed — ported verbatim from the prototype logic class.
 
@@ -27,12 +37,22 @@ const routeFor = (k: string) => k === 'system' ? 'settings' : k === 'reminder' ?
 
 export default function NotificationsPage() {
   const { S, set, navigate, toast } = useApp();
+  const { notifs, setNotifs, apiMode } = useNotifications(DEMO_FEED);
+  const feedMap = useMemo(() => new Map(notifs.map((n) => [n.id, n])), [notifs]);
 
-  const isRead = (id: string) => S.notifRead.includes(id);
-  const isArch = (id: string) => S.notifArchived.includes(id);
-  const markRead = (id: string, val: boolean) => set((s: any) => ({
-    notifRead: val ? (s.notifRead.includes(id) ? s.notifRead : [...s.notifRead, id]) : s.notifRead.filter((x: string) => x !== id),
-  }));
+  const isRead = (id: string) => apiMode ? !!feedMap.get(id)?.read : S.notifRead.includes(id);
+  const isArch = (id: string) => apiMode ? !!feedMap.get(id)?.archived : S.notifArchived.includes(id);
+  // Optimistically flip a row, persisting via PATCH (best-effort) in API mode.
+  const patchNotif = (id: string, patch: { read?: boolean; archived?: boolean }) => {
+    setNotifs((list) => list.map((n) => (n.id === id ? { ...n, ...patch } : n)));
+    updateNotification(id, patch).catch(() => { /* UI already optimistic */ });
+  };
+  const markRead = (id: string, val: boolean) => {
+    if (apiMode) { patchNotif(id, { read: val }); return; }
+    set((s: any) => ({
+      notifRead: val ? (s.notifRead.includes(id) ? s.notifRead : [...s.notifRead, id]) : s.notifRead.filter((x: string) => x !== id),
+    }));
+  };
 
   const buildRow = (n: any) => {
     const m = nMeta(n.kind); const read = isRead(n.id); const arch = isArch(n.id);
@@ -45,25 +65,40 @@ export default function NotificationsPage() {
       onToggleRead: (e?: any) => { if (e) e.stopPropagation(); markRead(n.id, read ? false : true); },
       onArchive: (e?: any) => {
         if (e) e.stopPropagation();
+        if (apiMode) {
+          patchNotif(n.id, { archived: true });
+          toast('ההתראה הועברה לארכיון', 'success', { label: 'ביטול', onClick: () => patchNotif(n.id, { archived: false }) });
+          return;
+        }
         set((s: any) => ({ notifArchived: [...s.notifArchived, n.id] }));
         toast('ההתראה הועברה לארכיון', 'success', { label: 'ביטול', onClick: () => set((s: any) => ({ notifArchived: s.notifArchived.filter((x: string) => x !== n.id) })) });
       },
-      onRestore: (e?: any) => { if (e) e.stopPropagation(); set((s: any) => ({ notifArchived: s.notifArchived.filter((x: string) => x !== n.id) })); toast('ההתראה שוחזרה'); },
+      onRestore: (e?: any) => {
+        if (e) e.stopPropagation();
+        if (apiMode) { patchNotif(n.id, { archived: false }); toast('ההתראה שוחזרה'); return; }
+        set((s: any) => ({ notifArchived: s.notifArchived.filter((x: string) => x !== n.id) }));
+        toast('ההתראה שוחזרה');
+      },
     };
   };
 
-  const markAllRead = () => set({ notifRead: NOTIFS.filter((n) => !isArch(n.id)).map((n) => n.id) });
+  const markAllRead = () => {
+    const ids = notifs.filter((n) => !isArch(n.id)).map((n) => n.id);
+    if (apiMode) { ids.forEach((id) => { if (!feedMap.get(id)?.read) patchNotif(id, { read: true }); }); return; }
+    set({ notifRead: ids });
+  };
   const archiveReadNotifs = () => {
-    const ids = NOTIFS.filter((n) => !isArch(n.id) && isRead(n.id)).map((n) => n.id);
+    const ids = notifs.filter((n) => !isArch(n.id) && isRead(n.id)).map((n) => n.id);
     if (!ids.length) { toast('אין התראות שנקראו לניקוי', 'info'); return; }
+    if (apiMode) { ids.forEach((id) => patchNotif(id, { archived: true })); toast(ids.length + ' התראות שנקראו הועברו לארכיון'); return; }
     set((s: any) => ({ notifArchived: [...s.notifArchived, ...ids] }));
     toast(ids.length + ' התראות שנקראו הועברו לארכיון');
   };
 
-  const fCount = (key: string) => key === 'archived' ? NOTIFS.filter((n) => isArch(n.id)).length
-    : key === 'all' ? NOTIFS.filter((n) => !isArch(n.id)).length
-      : key === 'unread' ? NOTIFS.filter((n) => !isArch(n.id) && !isRead(n.id)).length
-        : NOTIFS.filter((n) => !isArch(n.id) && n.kind === key).length;
+  const fCount = (key: string) => key === 'archived' ? notifs.filter((n) => isArch(n.id)).length
+    : key === 'all' ? notifs.filter((n) => !isArch(n.id)).length
+      : key === 'unread' ? notifs.filter((n) => !isArch(n.id) && !isRead(n.id)).length
+        : notifs.filter((n) => !isArch(n.id) && n.kind === key).length;
 
   const notifFilters = FILT.map((f) => {
     const active = S.notifFilter === f.key; const c = fCount(f.key);
@@ -75,9 +110,9 @@ export default function NotificationsPage() {
   });
 
   let visible: any[];
-  if (S.notifFilter === 'archived') visible = NOTIFS.filter((n) => isArch(n.id));
+  if (S.notifFilter === 'archived') visible = notifs.filter((n) => isArch(n.id));
   else {
-    visible = NOTIFS.filter((n) => !isArch(n.id));
+    visible = notifs.filter((n) => !isArch(n.id));
     if (S.notifFilter === 'unread') visible = visible.filter((n) => !isRead(n.id));
     else if (S.notifFilter !== 'all') visible = visible.filter((n) => n.kind === S.notifFilter);
   }
@@ -91,7 +126,11 @@ export default function NotificationsPage() {
     };
   });
 
-  const markGroupRead = (ids: string[]) => { if (ids.length) set((s: any) => ({ notifRead: [...new Set([...s.notifRead, ...ids])] })); };
+  const markGroupRead = (ids: string[]) => {
+    if (!ids.length) return;
+    if (apiMode) { ids.forEach((id) => { if (!feedMap.get(id)?.read) patchNotif(id, { read: true }); }); return; }
+    set((s: any) => ({ notifRead: [...new Set([...s.notifRead, ...ids])] }));
+  };
   const buildGroup = (label: string, items: any[]) => {
     const unread = items.filter((n) => !isRead(n.id)).length;
     return {
@@ -117,8 +156,8 @@ export default function NotificationsPage() {
   };
   const em = emptyMap[S.notifFilter] || emptyMap.all;
   const notifEmptyTitle = em[0]; const notifEmptyText = em[1];
-  const notifCenterUnread = String(NOTIFS.filter((n) => !isArch(n.id) && !isRead(n.id)).length);
-  const notifCenterTotal = String(NOTIFS.filter((n) => !isArch(n.id)).length);
+  const notifCenterUnread = String(notifs.filter((n) => !isArch(n.id) && !isRead(n.id)).length);
+  const notifCenterTotal = String(notifs.filter((n) => !isArch(n.id)).length);
 
   return (
     <div data-screen-label="מרכז ההתראות" style={{ maxWidth: 1000, margin: '0 auto' }}>

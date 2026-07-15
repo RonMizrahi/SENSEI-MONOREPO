@@ -32,6 +32,9 @@ export class MeetingSummary {
   @Column({ type: 'text', nullable: true })
   error!: string | null;
 
+  @Column({ type: 'text', nullable: true })
+  insight!: string | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

@@ -184,9 +184,11 @@ export default function ReportPage() {
   const lastSummary = useApi && apiReport?.last_summary_excerpt
     ? apiReport.last_summary_excerpt
     : sessionSummaryText(cp, 0);
-  // Suggested opening questions are demo-only — the live report has no such
-  // field, so hide them once a live report is ready.
-  const reportQuestions = useApi && apiReport?.status === 'ready' ? [] : MOCK_QUESTIONS;
+  // The live report now carries suggested questions (M5); use them when present,
+  // otherwise fall back to the demo copy.
+  const reportQuestions = useApi && apiReport?.status === 'ready'
+    ? (apiReport.questions?.length ? apiReport.questions : MOCK_QUESTIONS)
+    : MOCK_QUESTIONS;
 
   const nextDateLabel = useApi
     ? formatNextDateChip(nextMeetingStart)

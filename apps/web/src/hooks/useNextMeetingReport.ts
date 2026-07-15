@@ -15,7 +15,7 @@ export interface ResolvedReport {
   intro: string
   changes: string[]
   openTopics: string[]
-  questions: string[]    // suggested opening questions — demo-only (empty when live)
+  questions: string[]    // suggested opening questions (live from the API, or demo copy)
   summary: string
   insight: string
 }
@@ -65,7 +65,8 @@ export function useNextMeetingReport(
       intro: ready ? (report?.intro || '') : reportIntro(patientName),
       changes: ready ? (report?.changes || []) : REPORT_CHANGES,
       openTopics: ready ? (report?.open_topics || []) : REPORT_OPEN,
-      questions: ready ? [] : REPORT_QUESTIONS,
+      // Live report now carries questions (M5); fall back to demo copy if it has none.
+      questions: ready ? (report?.questions?.length ? report.questions : REPORT_QUESTIONS) : REPORT_QUESTIONS,
       summary: excerpt || demoSummary,
       insight: excerpt ? excerpt.slice(0, 280) : demoInsight,
     };

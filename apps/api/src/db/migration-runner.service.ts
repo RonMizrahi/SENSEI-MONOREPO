@@ -1,8 +1,10 @@
 import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { DataSource, type QueryRunner } from 'typeorm';
+import type { Env } from '../config/env.schema';
 
 /** Default location of the versioned SQL scripts (apps/api/db/migrations) — valid from src/ and dist/. */
 export const DEFAULT_MIGRATIONS_DIR = path.resolve(__dirname, '..', '..', 'db', 'migrations');
@@ -11,6 +13,8 @@ const MIGRATIONS_TABLE = '_migrations';
 const SQL_EXTENSION = '.sql';
 /** App-wide advisory-lock key serializing migration runs across concurrent processes. */
 const MIGRATIONS_LOCK_KEY = 815589001;
+/** Transaction-local GUC the demo-seed migrations read to gate their inserts. */
+const SEED_DEMO_GUC = 'app.seed_demo';
 
 /** Formats an unknown thrown value into a readable message. */
 function describeError(error: unknown): string {
@@ -27,7 +31,15 @@ function describeError(error: unknown): string {
 export class MigrationRunnerService implements OnModuleInit {
   private readonly logger = new Logger(MigrationRunnerService.name);
 
-  constructor(@InjectDataSource() private readonly dataSource: DataSource) {}
+  constructor(
+    @InjectDataSource() private readonly dataSource: DataSource,
+    private readonly config: ConfigService<Env, true>,
+  ) {}
+
+  /** Returns the demo-seed gate as the string set_config expects ('true' | 'false'). */
+  private seedDemoFlag(): string {
+    return this.config.get('SEED_DEMO_DATA', { infer: true }) ? 'true' : 'false';
+  }
 
   /** Boot hook — applies all pending migrations before the app starts serving. */
   async onModuleInit(): Promise<void> {
@@ -121,6 +133,9 @@ export class MigrationRunnerService implements OnModuleInit {
     const sql = await fs.readFile(path.join(migrationsDir, file), 'utf8');
     await queryRunner.startTransaction();
     try {
+      // Transaction-local gate the demo-seed files read via current_setting(); SET can't
+      // bind params, so set_config(..., is_local => true) scopes it to this migration.
+      await queryRunner.query(`SELECT set_config($1, $2, true)`, [SEED_DEMO_GUC, this.seedDemoFlag()]);
       await queryRunner.query(sql);
       await queryRunner.query(`INSERT INTO ${MIGRATIONS_TABLE} (name) VALUES ($1)`, [file]);
       await queryRunner.commitTransaction();

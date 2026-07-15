@@ -15,6 +15,32 @@ export interface CreateUserFields {
   role: string;
 }
 
+/** Editable therapist profile fields (undefined leaves that field unchanged). */
+export interface UpdateProfileFields {
+  fullName?: string | null;
+  phone?: string | null;
+  gender?: string | null;
+  title?: string | null;
+  licenseNumber?: string | null;
+  org?: string | null;
+  bio?: string | null;
+  avatarColor?: string | null;
+}
+
+/** Narrows a profile update to its defined fields — shared by the real and mock repos. */
+export function definedProfileFields(fields: UpdateProfileFields): Partial<User> {
+  const defined: Partial<User> = {};
+  if (fields.fullName !== undefined) defined.fullName = fields.fullName;
+  if (fields.phone !== undefined) defined.phone = fields.phone;
+  if (fields.gender !== undefined) defined.gender = fields.gender;
+  if (fields.title !== undefined) defined.title = fields.title;
+  if (fields.licenseNumber !== undefined) defined.licenseNumber = fields.licenseNumber;
+  if (fields.org !== undefined) defined.org = fields.org;
+  if (fields.bio !== undefined) defined.bio = fields.bio;
+  if (fields.avatarColor !== undefined) defined.avatarColor = fields.avatarColor;
+  return defined;
+}
+
 /** Persistence contract for therapist accounts. */
 export interface UserRepository {
   /** Inserts a new user; returns null when the email is already registered. */
@@ -23,6 +49,8 @@ export interface UserRepository {
   findByEmail(email: string): Promise<User | null>;
   /** Finds a user by id, or null. */
   findById(id: string): Promise<User | null>;
+  /** Applies profile field updates; returns the updated user or null when missing. */
+  updateProfile(id: string, fields: UpdateProfileFields): Promise<User | null>;
   /** Bumps token_version (revokes all issued tokens); false when the user is missing. */
   incrementTokenVersion(id: string): Promise<boolean>;
   /** Replaces the password hash AND bumps token_version; false when the user is missing. */
@@ -68,6 +96,19 @@ export class UserTypeOrmRepository implements UserRepository {
   /** Finds a user by id, or null. */
   findById(id: string): Promise<User | null> {
     return this.users.findOne({ where: { id } });
+  }
+
+  /**
+   * Applies the defined profile fields via a single atomic UPDATE.
+   * @returns The updated user, or null when the id is unknown.
+   */
+  async updateProfile(id: string, fields: UpdateProfileFields): Promise<User | null> {
+    const patch = definedProfileFields(fields);
+    if (Object.keys(patch).length > 0) {
+      const result = await this.users.update({ id }, patch);
+      if ((result.affected ?? 0) === 0) return null;
+    }
+    return this.findById(id);
   }
 
   /** Atomically bumps token_version; false when the user is missing. */

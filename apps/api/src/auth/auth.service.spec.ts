@@ -2,7 +2,10 @@
 import { UnauthorizedException } from '@nestjs/common';
 import type { JwtService } from '@nestjs/jwt';
 import { randomUUID } from 'node:crypto';
-import { DuplicateResourceException } from '../common/exceptions/app.exception';
+import {
+  DuplicateResourceException,
+  ResourceNotFoundException,
+} from '../common/exceptions/app.exception';
 import { AUTH_TYPE_PASSWORD, ROLE_THERAPIST, TOKEN_TYPE_BEARER } from './auth.constants';
 import { AuthService } from './auth.service';
 import { User } from './entities/user.entity';
@@ -33,6 +36,7 @@ describe('AuthService', () => {
       create: jest.fn(),
       findByEmail: jest.fn(),
       findById: jest.fn(),
+      updateProfile: jest.fn(),
       incrementTokenVersion: jest.fn(),
       changePassword: jest.fn(),
     };
@@ -209,6 +213,54 @@ describe('AuthService', () => {
 
       await expect(service.changePassword(randomUUID(), dto)).rejects.toThrow(
         UnauthorizedException,
+      );
+    });
+  });
+
+  describe('getProfile', () => {
+    it('maps the user row onto the profile wire shape', async () => {
+      const user = buildUser({ phone: '050-1', title: 'קלינאית', licenseNumber: 'L1' });
+      users.findById.mockResolvedValue(user);
+
+      const profile = await service.getProfile(user.id);
+
+      expect(profile).toMatchObject({
+        user_id: user.id,
+        email: user.email,
+        phone: '050-1',
+        title: 'קלינאית',
+        license_number: 'L1',
+      });
+    });
+
+    it('404s when the account no longer exists', async () => {
+      users.findById.mockResolvedValue(null);
+
+      await expect(service.getProfile(randomUUID())).rejects.toBeInstanceOf(
+        ResourceNotFoundException,
+      );
+    });
+  });
+
+  describe('updateProfile', () => {
+    it('applies edits (snake_case → repo fields) and returns the updated profile', async () => {
+      const user = buildUser({ phone: '052-9', gender: 'f' });
+      users.updateProfile.mockResolvedValue(user);
+
+      const profile = await service.updateProfile(user.id, { phone: '052-9', gender: 'f' });
+
+      expect(users.updateProfile).toHaveBeenCalledWith(
+        user.id,
+        expect.objectContaining({ phone: '052-9', gender: 'f' }),
+      );
+      expect(profile).toMatchObject({ phone: '052-9', gender: 'f' });
+    });
+
+    it('404s when the account no longer exists', async () => {
+      users.updateProfile.mockResolvedValue(null);
+
+      await expect(service.updateProfile(randomUUID(), { phone: 'x' })).rejects.toBeInstanceOf(
+        ResourceNotFoundException,
       );
     });
   });

@@ -40,6 +40,13 @@ export class NextMeetingReportDto {
   open_topics!: string[];
 
   @ApiProperty({
+    description: 'Suggested opening questions for the next meeting (Hebrew)',
+    example: ['מה הכי חשוב לך שנספיק לגעת בו בפגישה הקרובה?'],
+    type: [String],
+  })
+  questions!: string[];
+
+  @ApiProperty({
     description: 'Meeting ids whose ready summaries fed the report (oldest first)',
     example: ['9b2e6d1c-5f3a-4b7e-8c9d-0a1b2c3d4e5f'],
     type: [String],

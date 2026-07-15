@@ -7,11 +7,31 @@ import { createIntegrationApp, TestApp } from './utils/app-factory';
 const INIT_MIGRATION = '0001_init.sql';
 const REPORTS_PER_THERAPIST_MIGRATION = '0002_patient_reports_per_therapist.sql';
 const SEED_DEMO_PROTOTYPE_MIGRATION = '0003_seed_demo_prototype.sql';
-// Every versioned SQL file the boot-time runner applies, in filename order.
+const SEED_DEMO_IDENTITY_MIGRATION = '0004_seed_demo_identity.sql';
+const MEETING_SUMMARY_INSIGHT_MIGRATION = '0005_meeting_summary_insight.sql';
+const SEED_DEMO_SESSIONS_MIGRATION = '0006_seed_demo_sessions.sql';
+const NOTIFICATIONS_MIGRATION = '0007_notifications.sql';
+const SEED_DEMO_NOTIFICATIONS_MIGRATION = '0008_seed_demo_notifications.sql';
+const USER_PROFILE_SETTINGS_MIGRATION = '0009_user_profile_settings.sql';
+const SEED_DEMO_PROFILE_MIGRATION = '0010_seed_demo_profile.sql';
+const REPORT_QUESTIONS_NOTES_MIGRATION = '0011_report_questions_and_notes.sql';
+const SEED_DEMO_REPORTS_NOTES_MIGRATION = '0012_seed_demo_reports_notes.sql';
+// Every versioned SQL file the boot-time runner applies, in filename order. Seed
+// migrations apply (and are tracked) in every env; their inserts are gated by
+// SEED_DEMO_DATA, so this list is identical across dev and prod.
 const EXPECTED_MIGRATIONS = [
   INIT_MIGRATION,
   REPORTS_PER_THERAPIST_MIGRATION,
   SEED_DEMO_PROTOTYPE_MIGRATION,
+  SEED_DEMO_IDENTITY_MIGRATION,
+  MEETING_SUMMARY_INSIGHT_MIGRATION,
+  SEED_DEMO_SESSIONS_MIGRATION,
+  NOTIFICATIONS_MIGRATION,
+  SEED_DEMO_NOTIFICATIONS_MIGRATION,
+  USER_PROFILE_SETTINGS_MIGRATION,
+  SEED_DEMO_PROFILE_MIGRATION,
+  REPORT_QUESTIONS_NOTES_MIGRATION,
+  SEED_DEMO_REPORTS_NOTES_MIGRATION,
 ];
 const EXPECTED_TABLES = [
   '_migrations',
@@ -21,6 +41,9 @@ const EXPECTED_TABLES = [
   'transcripts',
   'meeting_summaries',
   'patient_reports',
+  'notifications',
+  'user_settings',
+  'patient_notes',
 ];
 
 // this file cannot use the factory's bundled close() for the first app (its
@@ -42,6 +65,12 @@ async function listAppliedMigrations(dataSource: DataSource): Promise<string[]> 
     'SELECT name FROM _migrations ORDER BY applied_at',
   );
   return rows.map((row) => row.name);
+}
+
+/** Counts rows in a table (identifier is a trusted test constant, not user input). */
+async function countRows(dataSource: DataSource, table: string): Promise<number> {
+  const rows = await dataSource.query<{ count: string }[]>(`SELECT count(*) AS count FROM ${table}`);
+  return Number(rows[0]?.count ?? 0);
 }
 
 describe('db migration runner (integration)', () => {
@@ -78,6 +107,18 @@ describe('db migration runner (integration)', () => {
     }
 
     await expect(listAppliedMigrations(dataSource)).resolves.toEqual(EXPECTED_MIGRATIONS);
+  });
+
+  it('demo-seed gate off (default): seed migrations apply but insert no gated rows', async () => {
+    if (!firstApp) throw new Error('first app did not boot');
+    const dataSource = firstApp.app.get(DataSource);
+    // SEED_DEMO_DATA is unset here, so 0004's guarded inserts affect 0 rows:
+    // no demo therapist and no seeded appointments reach a production-shaped DB.
+    await expect(countRows(dataSource, 'users')).resolves.toBe(0);
+    await expect(countRows(dataSource, 'calendar_events')).resolves.toBe(0);
+    // 0003 seeds the 4 demo patients UNCONDITIONALLY (not gated) — lock that contract
+    // so a future guard added/removed on 0003 can't silently flip it.
+    await expect(countRows(dataSource, 'patients')).resolves.toBe(4);
   });
 
   it('re-boot on the same database succeeds and records nothing new', async () => {

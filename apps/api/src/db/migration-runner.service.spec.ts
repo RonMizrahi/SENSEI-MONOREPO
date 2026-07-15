@@ -1,8 +1,15 @@
+import type { ConfigService } from '@nestjs/config';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import type { DataSource, QueryRunner } from 'typeorm';
+import type { Env } from '../config/env.schema';
 import { MigrationRunnerService } from './migration-runner.service';
+
+/** A ConfigService stub returning the given SEED_DEMO_DATA value. */
+function createConfigMock(seedDemo = false): ConfigService<Env, true> {
+  return { get: jest.fn(() => seedDemo) } as unknown as ConfigService<Env, true>;
+}
 
 interface DataSourceMock {
   dataSource: DataSource;
@@ -43,6 +50,10 @@ function createDataSourceMock(
       }
       if (sql.includes('pg_advisory_unlock')) {
         events.push('UNLOCK');
+        return Promise.resolve([]);
+      }
+      if (sql.includes('set_config')) {
+        events.push(`SEED_GUC ${String(params?.[1])}`);
         return Promise.resolve([]);
       }
       if (failOnSqlContaining !== undefined && sql.includes(failOnSqlContaining)) {
@@ -92,7 +103,7 @@ describe('MigrationRunnerService', () => {
     writeMigration('0001_first.sql', 'CREATE TABLE one (id int);');
     writeMigration('0010_tenth.sql', 'CREATE TABLE ten (id int);');
     const mock = createDataSourceMock();
-    const service = new MigrationRunnerService(mock.dataSource);
+    const service = new MigrationRunnerService(mock.dataSource, createConfigMock());
 
     const applied = await service.run(migrationsDir);
 
@@ -102,14 +113,17 @@ describe('MigrationRunnerService', () => {
       'ENSURE_TABLE',
       'SELECT_APPLIED',
       'BEGIN',
+      'SEED_GUC false',
       'CREATE TABLE one (id int);',
       'INSERT 0001_first.sql',
       'COMMIT',
       'BEGIN',
+      'SEED_GUC false',
       'CREATE TABLE two (id int);',
       'INSERT 0002_second.sql',
       'COMMIT',
       'BEGIN',
+      'SEED_GUC false',
       'CREATE TABLE ten (id int);',
       'INSERT 0010_tenth.sql',
       'COMMIT',
@@ -122,7 +136,7 @@ describe('MigrationRunnerService', () => {
     writeMigration('0001_first.sql', 'CREATE TABLE one (id int);');
     writeMigration('0002_second.sql', 'CREATE TABLE two (id int);');
     const mock = createDataSourceMock(['0001_first.sql']);
-    const service = new MigrationRunnerService(mock.dataSource);
+    const service = new MigrationRunnerService(mock.dataSource, createConfigMock());
 
     const applied = await service.run(migrationsDir);
 
@@ -135,7 +149,7 @@ describe('MigrationRunnerService', () => {
   it('applies nothing when everything is already recorded', async () => {
     writeMigration('0001_first.sql', 'CREATE TABLE one (id int);');
     const mock = createDataSourceMock(['0001_first.sql']);
-    const service = new MigrationRunnerService(mock.dataSource);
+    const service = new MigrationRunnerService(mock.dataSource, createConfigMock());
 
     await expect(service.run(migrationsDir)).resolves.toEqual([]);
     expect(mock.events).not.toContain('BEGIN');
@@ -145,7 +159,7 @@ describe('MigrationRunnerService', () => {
     writeMigration('0001_bad.sql', 'BOOM;');
     writeMigration('0002_never.sql', 'CREATE TABLE never (id int);');
     const mock = createDataSourceMock([], 'BOOM');
-    const service = new MigrationRunnerService(mock.dataSource);
+    const service = new MigrationRunnerService(mock.dataSource, createConfigMock());
 
     await expect(service.run(migrationsDir)).rejects.toThrow(
       /Migration 0001_bad\.sql failed and was rolled back/,
@@ -157,23 +171,35 @@ describe('MigrationRunnerService', () => {
       'ENSURE_TABLE',
       'SELECT_APPLIED',
       'BEGIN',
+      'SEED_GUC false',
       'ROLLBACK',
       'UNLOCK',
       'RELEASE',
     ]);
   });
 
+  it('sets the seed-demo GUC to true for each migration when SEED_DEMO_DATA is on', async () => {
+    writeMigration('0001_first.sql', 'CREATE TABLE one (id int);');
+    const mock = createDataSourceMock();
+    const service = new MigrationRunnerService(mock.dataSource, createConfigMock(true));
+
+    await service.run(migrationsDir);
+
+    expect(mock.events).toContain('SEED_GUC true');
+    expect(mock.events).not.toContain('SEED_GUC false');
+  });
+
   it('propagates the failure from onModuleInit so boot aborts', async () => {
     const mock = createDataSourceMock();
     (mock.dataSource.query as jest.Mock).mockRejectedValue(new Error('connection refused'));
-    const service = new MigrationRunnerService(mock.dataSource);
+    const service = new MigrationRunnerService(mock.dataSource, createConfigMock());
 
     await expect(service.onModuleInit()).rejects.toThrow('connection refused');
   });
 
   it('returns an empty list for an empty migrations directory', async () => {
     const mock = createDataSourceMock();
-    const service = new MigrationRunnerService(mock.dataSource);
+    const service = new MigrationRunnerService(mock.dataSource, createConfigMock());
 
     await expect(service.run(migrationsDir)).resolves.toEqual([]);
     expect(mock.events).not.toContain('BEGIN');
@@ -183,7 +209,7 @@ describe('MigrationRunnerService', () => {
     writeMigration('README.md', 'not sql');
     writeMigration('0001_first.sql', 'CREATE TABLE one (id int);');
     const mock = createDataSourceMock();
-    const service = new MigrationRunnerService(mock.dataSource);
+    const service = new MigrationRunnerService(mock.dataSource, createConfigMock());
 
     await expect(service.run(migrationsDir)).resolves.toEqual(['0001_first.sql']);
   });
@@ -191,7 +217,7 @@ describe('MigrationRunnerService', () => {
   it('rejects with a clear error before touching the database when the directory is unreadable', async () => {
     const missingDir = path.join(migrationsDir, 'does-not-exist');
     const mock = createDataSourceMock();
-    const service = new MigrationRunnerService(mock.dataSource);
+    const service = new MigrationRunnerService(mock.dataSource, createConfigMock());
 
     await expect(service.run(missingDir)).rejects.toThrow(
       /Cannot read migrations directory .*does-not-exist/,
