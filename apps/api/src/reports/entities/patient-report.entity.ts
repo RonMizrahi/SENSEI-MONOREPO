@@ -4,22 +4,28 @@ import {
   Entity,
   Index,
   PrimaryGeneratedColumn,
+  Unique,
   UpdateDateColumn,
 } from 'typeorm';
 import type { GenerationStatus } from '../../summaries/entities/meeting-summary.entity';
 
 /**
  * Next-meeting prep report — NEW table (`patient_reports`), no Python equivalent.
- * One live report per patient, regenerated on demand from their ready summaries.
+ * One live report per (patient, therapist): each therapist owns their own row so
+ * therapists sharing a patient never collide (regenerated from their summaries).
  */
 @Entity('patient_reports')
+@Unique('patient_reports_patient_therapist_key', ['patientId', 'therapistId'])
 export class PatientReport {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ name: 'patient_id', type: 'uuid', unique: true })
+  @Column({ name: 'patient_id', type: 'uuid' })
   @Index()
   patientId!: string;
+
+  @Column({ name: 'therapist_id', type: 'uuid' })
+  therapistId!: string;
 
   @Column({ type: 'varchar', length: 16, default: 'pending' })
   status!: GenerationStatus;

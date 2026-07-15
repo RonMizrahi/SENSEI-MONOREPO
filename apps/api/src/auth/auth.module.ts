@@ -3,17 +3,21 @@ import { ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { isMockMode } from '../common/mock-mode';
+import { isMockMode, provideMockSwappable } from '../common/mock-mode';
 import type { Env } from '../config/env.schema';
 import { JWT_ISSUER } from './auth.constants';
+import { AuthController } from './auth.controller';
+import { AuthService } from './auth.service';
 import { User } from './entities/user.entity';
 import { PasswordModule } from './password.module';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { UserMockRepository } from './user.mock.repository';
+import { USER_REPOSITORY, UserTypeOrmRepository } from './user.repository';
+import type { UserRepository } from './user.repository';
 
 /**
- * Foundation skeleton — JWT verification + password hashing wiring.
- * The auth worker adds the /auth endpoints, user repository (real + mock),
- * and token_version revocation.
+ * Authentication — /auth endpoints, JWT verification with token_version
+ * revocation, argon2id hashing, and the mode-swapped user repository.
  */
 @Module({
   imports: [
@@ -31,7 +35,12 @@ import { JwtStrategy } from './strategies/jwt.strategy';
       }),
     }),
   ],
-  providers: [JwtStrategy],
+  controllers: [AuthController],
+  providers: [
+    JwtStrategy,
+    AuthService,
+    provideMockSwappable<UserRepository>(USER_REPOSITORY, UserTypeOrmRepository, UserMockRepository),
+  ],
   exports: [JwtModule, PasswordModule],
 })
 export class AuthModule {}

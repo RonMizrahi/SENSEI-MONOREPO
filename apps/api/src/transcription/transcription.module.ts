@@ -1,15 +1,21 @@
 import { Module } from '@nestjs/common';
-import {
-  NoopTranscriptionProvider,
-  TRANSCRIPTION_PROVIDER,
-} from './transcription.provider';
+import { provideMockSwappable } from '../common/mock-mode';
+import { ElevenLabsTranscriber } from './elevenlabs.transcriber';
+import { MockTranscriber } from './mock.transcriber';
+import { TRANSCRIPTION_PROVIDER, type TranscriptionProvider } from './transcription.provider';
 
 /**
- * Foundation skeleton — the audio-transcription worker replaces the no-op
- * TRANSCRIPTION_PROVIDER with the ElevenLabs + mock implementations.
+ * Speech-to-text wiring — ElevenLabs Scribe in real mode, the canned Hebrew
+ * mock in MOCK_MODE (no API key required).
  */
 @Module({
-  providers: [{ provide: TRANSCRIPTION_PROVIDER, useClass: NoopTranscriptionProvider }],
+  providers: [
+    provideMockSwappable<TranscriptionProvider>(
+      TRANSCRIPTION_PROVIDER,
+      ElevenLabsTranscriber,
+      MockTranscriber,
+    ),
+  ],
   exports: [TRANSCRIPTION_PROVIDER],
 })
 export class TranscriptionModule {}

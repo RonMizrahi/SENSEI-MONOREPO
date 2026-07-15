@@ -1,0 +1,121 @@
+import { Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { SEED_EVENTS, SEED_PATIENTS, SEED_SUMMARY_TEXT, SEED_USER } from '../mock/seed';
+import { PatientReport } from './entities/patient-report.entity';
+import {
+  pendingResetFields,
+  ReadyMeetingSummary,
+  ReadyReportFields,
+  ReportsRepository,
+} from './reports.repository';
+import { STATUS_FAILED, STATUS_READY, STATUS_RUNNING } from './reports.constants';
+
+/** Seeded in-memory reports repository for MOCK_MODE — no database required. */
+@Injectable()
+export class MockReportsRepository implements ReportsRepository {
+  private readonly reports = new Map<string, PatientReport>();
+
+  /** Composite in-memory key mirroring the (patient_id, therapist_id) unique row. */
+  private keyFor(patientId: string, therapistId: string): string {
+    return `${patientId}:${therapistId}`;
+  }
+
+  /** Whether the id belongs to a seeded demo patient. */
+  patientExists(patientId: string): Promise<boolean> {
+    return Promise.resolve(SEED_PATIENTS.some((patient) => patient.id === patientId));
+  }
+
+  /** Whether SEED_USER owns a seeded meeting with the patient (parity scoping). */
+  therapistHasMeetingWithPatient(patientId: string, therapistId: string): Promise<boolean> {
+    return Promise.resolve(
+      therapistId === SEED_USER.id && SEED_EVENTS.some((event) => event.patientId === patientId),
+    );
+  }
+
+  /** The therapist's own report row for the patient, or null when none was requested. */
+  findByPatientAndTherapist(
+    patientId: string,
+    therapistId: string,
+  ): Promise<PatientReport | null> {
+    return Promise.resolve(this.reports.get(this.keyFor(patientId, therapistId)) ?? null);
+  }
+
+  /** Creates or wipes the therapist's own report row back to a clean 'pending' state. */
+  resetToPending(patientId: string, therapistId: string): Promise<PatientReport> {
+    const key = this.keyFor(patientId, therapistId);
+    const existing = this.reports.get(key);
+    const report = existing ?? new PatientReport();
+    if (!existing) {
+      report.id = randomUUID();
+      report.patientId = patientId;
+      report.therapistId = therapistId;
+      report.createdAt = new Date();
+    }
+    Object.assign(report, pendingResetFields());
+    report.updatedAt = new Date();
+    this.reports.set(key, report);
+    return Promise.resolve(report);
+  }
+
+  /** Marks the therapist's own report row 'running'. */
+  markRunning(patientId: string, therapistId: string): Promise<void> {
+    const report = this.reports.get(this.keyFor(patientId, therapistId));
+    if (report) {
+      report.status = STATUS_RUNNING;
+      report.updatedAt = new Date();
+    }
+    return Promise.resolve();
+  }
+
+  /** Marks the therapist's own report row 'ready' with the generated content. */
+  markReady(patientId: string, therapistId: string, fields: ReadyReportFields): Promise<void> {
+    const report = this.reports.get(this.keyFor(patientId, therapistId));
+    if (report) {
+      report.status = STATUS_READY;
+      report.intro = fields.intro;
+      report.changes = fields.changes;
+      report.openTopics = fields.openTopics;
+      report.sourceMeetingIds = fields.sourceMeetingIds;
+      report.lastSummaryExcerpt = fields.lastSummaryExcerpt;
+      report.generatedAt = fields.generatedAt;
+      report.model = fields.model;
+      report.error = null;
+      report.updatedAt = new Date();
+    }
+    return Promise.resolve();
+  }
+
+  /** Marks the therapist's own report row 'failed' with a user-facing error. */
+  markFailed(patientId: string, therapistId: string, error: string): Promise<void> {
+    const report = this.reports.get(this.keyFor(patientId, therapistId));
+    if (report) {
+      report.status = STATUS_FAILED;
+      report.error = error;
+      report.updatedAt = new Date();
+    }
+    return Promise.resolve();
+  }
+
+  /** The therapist's seeded meetings for the patient count as ready summaries (canned text). */
+  findReadySummaries(patientId: string, therapistId: string): Promise<ReadyMeetingSummary[]> {
+    if (therapistId !== SEED_USER.id) return Promise.resolve([]);
+    const summaries = SEED_EVENTS.filter((event) => event.patientId === patientId)
+      .sort((a, b) => a.dayOffset - b.dayOffset || a.startHour - b.startHour)
+      .map((event) => ({ meetingId: event.id, text: SEED_SUMMARY_TEXT }));
+    return Promise.resolve(summaries);
+  }
+
+  /** Fails every row stranded 'running' (startup sweep after a crash/restart). */
+  failStrandedRunning(error: string): Promise<number> {
+    let swept = 0;
+    for (const report of this.reports.values()) {
+      if (report.status === STATUS_RUNNING) {
+        report.status = STATUS_FAILED;
+        report.error = error;
+        report.updatedAt = new Date();
+        swept += 1;
+      }
+    }
+    return Promise.resolve(swept);
+  }
+}

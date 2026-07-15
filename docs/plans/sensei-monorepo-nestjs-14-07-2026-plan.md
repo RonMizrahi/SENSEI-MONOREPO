@@ -1,5 +1,30 @@
 # Plan — SENSEI Monorepo via /batch: NestJS API (port of senseiAPI) + React web, parallel worktree workers
 
+## Execution outcome (2026-07-15) — [DONE]
+
+**Phase A — Foundation** `[DONE]` — committed to `main` (`11ef77b`): trimmed template scaffold, 6 frozen entities + `0001_init.sql`, Zod env, cross-module seam tokens with no-op defaults, MOCK_MODE TEST_USER bypass, shared test factory, CI. Gate A (review/simplify/security) applied; 2 security hardenings folded in (prod JWT_SECRET always required; `@Exclude()` on `passwordHash`).
+
+**Phase B — 8 parallel worktree units** `[DONE]` — all landed as PRs #1–#8, each green on CI, each through the `code-review` skill:
+- U1 db-migration-runner (#3), U2 auth (#2), U3 patients (#5), U4 calendar (#4), U5 audio-transcription (#6), U6 summaries (#8), U7 reports (#7), U8 docs-dx (#1).
+- A transient model outage killed the first two launch waves mid-startup (no commits lost); relaunched via a canary-then-fanout pattern.
+
+**Phase C — Integration** `[DONE]` on `batch/integration` (off `main`):
+- All 8 branches merged **clean, zero conflicts** (frozen-file discipline held).
+- **C1 authorization sweep** `[DONE]`: background security reviews confirmed a systemic IDOR — audio/summaries/reports acted on `meeting_id`/`patient_id` with no ownership check. Fixed by scoping every meeting/patient-derived resource to `calendar_events.therapist_id` via `@CurrentUser` (404 for non-owners; reports never aggregate another therapist's summaries). Committed cross-therapist negative tests per module. No schema change needed.
+- **C2 infra** `[DONE]`: shared Testcontainers Postgres via Jest `globalSetup` + per-suite `provisionDatabase()` — integration suite went from 991s (flaky container-start timeouts) to **~25s, deterministic**; `app-factory` gained a `DATABASE_URL` reuse path; **shipped `db/migrations` into the deploy bundle** (`files: ["dist","db"]` — was a prod-boot blocker); fixed `compose.yaml` pg18 volume path.
+- **C3 web wiring** `[DONE]`: `apps/web/.env.example` documents the local API URL. Integrated path proven with a live MOCK_MODE smoke — form-urlencoded demo login, whoami, seeded patients/calendar, summary 200, CORS 204 for `:3110`, and the IDOR fix holding live (therapist B → 404).
+- **C4 Gate B holistic review** `[DONE]`: seam-coherence finder clean (all 11 cross-module tokens wired, no cycles, MOCK_MODE consistent); infra finder found only CI-edge cases (applied the 2 highest-value: collision-free shared-URI env + guarded read, Dockerfile comment); **IDOR finder found 3 more real cross-therapist gaps, all fixed**:
+  1. `patient_reports` was `UNIQUE(patient_id)` — two therapists sharing a patient could read/clobber each other's report. Fixed with **`0002_patient_reports_per_therapist.sql`** (adds `therapist_id`, composite unique `(patient_id, therapist_id)`, FK→users) + per-therapist scoping through the reports repo/service/mock; new int test proves B's report contains only B's content, A's row survives B's POST.
+  2. `GET /audio` listed every stored file id unscoped → therapist B could enumerate + download A's retained raw audio. Removed the enumeration endpoint (unused by the SPA; by-id endpoints remain capability-protected by unguessable UUID).
+  3. (400-vs-404 patient-existence oracle) — left as documented low-severity: patients are unowned and UUIDs unguessable.
+- **Verification**: combined `turbo lint typecheck test build` green (**374 api unit + 358 web tests**); `test:int` **88/88 green** in ~25s. **PR #9** (`batch/integration → main`, supersedes #1–#8) — CI green.
+- **Phase 4 QA acceptance pass** (qa-engineer, live, real Postgres, two identities): **verdict PASS-WITH-ISSUES**, no S1, **33/33 green paths**. Deploy/config/boot reality proven (both migrations applied on boot, `0002` constraint live). Crown-jewel authorization holds under two-identity attack — calendar/summaries/audio/reports all therapist-scoped (Bob → 404 every verb), report isolation holds for a shared patient, JWT revocation / mass-assignment stripping / injection all pass, no serialization leaks. Findings:
+  - **S2 BUG-1** — shared patient roster (any therapist reads/edits/archives any patient; `patients` has no owner column). **Owner decision (2026-07-15): INTENTIONAL — patients are a shared clinic roster for this POC/prototype; not a bug.** Making the roster private-per-therapist (a `patients.therapist_id` migration + `/patients` scoping) is the documented path if multi-tenant isolation is needed later. All *meeting-derived* clinical data (summaries, audio, reports) remains therapist-scoped regardless.
+  - **S3 BUG-2** — `DELETE /patients/{id}` with a linked calendar event → 500 (FK NO ACTION) instead of a clean 409.
+  - **S4 BUG-3** — `POST /calendar` accepts `start_at > end_at` → 201 (cross-field validation missing; inconsistent with the `from>to` GET guard).
+
+**Deferred follow-ups (documented, not blockers):** committed Playwright e2e harness (new browser dep + CI job + dual-server orchestration — the live QA pass covers integrated journeys); env-tunable throttler limits; **patient-roster tenancy** — `patients` still has no per-therapist owner column (any authenticated therapist can list/edit any patient row via `/patients`); making the roster private-per-therapist (vs. a shared clinic roster) is a product decision needing a further migration adding `patients.therapist_id`. Reports and all meeting-derived resources are now therapist-scoped regardless.
+
 ## Context
 
 Convert the Python `senseiAPI` (FastAPI) to **NestJS** in the fresh `SENSEI-MONOREPO` (github.com/RonMizrahi/SENSEI-MONOREPO), following `RonMizrahi/nestjs-service-template`, bring the React SPA (SENSEI repo, branch `new-ui`) in as `apps/web`, wire front↔back, keep mock mode at both layers, and manage schema via **versioned SQL scripts auto-run on boot** against **Supabase**. Previously planned as 7 sequential milestones; the user invoked **/batch** to replan for parallel execution (plan-guidelines strategy D).

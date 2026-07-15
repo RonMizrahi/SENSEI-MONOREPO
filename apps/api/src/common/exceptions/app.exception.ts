@@ -30,3 +30,14 @@ export class DuplicateResourceException extends AppException {
     );
   }
 }
+
+/** Thrown when deleting a patient still referenced by calendar events — maps to 409. */
+export class PatientHasLinkedEventsException extends AppException {
+  constructor() {
+    super(
+      'PATIENT_HAS_LINKED_EVENTS',
+      'cannot delete a patient with linked calendar events',
+      HttpStatus.CONFLICT,
+    );
+  }
+}

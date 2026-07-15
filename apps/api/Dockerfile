@@ -11,7 +11,7 @@ COPY . .
 RUN pnpm install --frozen-lockfile
 RUN pnpm --filter api build
 # `deploy` produces a symlink-free bundle at /app: the api's published files
-# ("files": ["dist"] in its package.json) + production-only node_modules.
+# ("files": ["dist","db"] in its package.json — dist + SQL migrations) + production-only node_modules.
 RUN pnpm --filter api deploy --prod --legacy /app
 
 # --- runtime: alpine, nonroot user ---
