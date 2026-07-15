@@ -16,6 +16,7 @@ import { TrimPipe } from './common/pipes/trim.pipe';
 import { validateEnv, type Env } from './config/env.schema';
 import { DbModule } from './db/db.module';
 import { HealthModule } from './health/health.module';
+import { NotificationsModule } from './notifications/notifications.module';
 import { PatientsModule } from './patients/patients.module';
 import { ReportsModule } from './reports/reports.module';
 import { SummariesModule } from './summaries/summaries.module';
@@ -41,6 +42,7 @@ import { TranscriptsModule } from './transcripts/transcripts.module';
     TranscriptsModule,
     SummariesModule,
     ReportsModule,
+    NotificationsModule,
     LoggerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env, true>) => ({

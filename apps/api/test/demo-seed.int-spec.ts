@@ -56,10 +56,25 @@ const transcriptSchema = z.object({
   raw_text: z.string(),
   segments: z.array(z.object({ speaker: z.string(), text: z.string() })),
 });
+const notificationListSchema = z.array(
+  z.object({
+    id: z.uuid(),
+    kind: z.enum(['summary', 'risk', 'reminder', 'system']),
+    patient_id: z.uuid().nullable(),
+    title: z.string(),
+    body: z.string(),
+    group_label: z.string(),
+    display_time: z.string(),
+    read: z.boolean(),
+    archived: z.boolean(),
+    created_at: z.iso.datetime(),
+  }),
+);
 // The seeded past sessions fall in this window (SESSION_DATES: May–Jun 2026).
 const PAST_FROM = '2026-05-01';
 const PAST_TO = '2026-06-30';
 const SEEDED_SESSION_COUNT = 31;
+const SEEDED_NOTIFICATION_COUNT = 9;
 
 /** YYYY-MM-DD `days` from today, for the /calendar from/to window. */
 function isoDate(days: number): string {
@@ -161,6 +176,37 @@ describe('demo-data seed gating (integration)', () => {
       const token = await loginDemo(seeded.httpServer);
       await request(seeded.httpServer)
         .get(`/meetings/${randomUUID()}/transcript`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
+    });
+
+    it('lists the 9 seeded notifications, newest first, and toggles one', async () => {
+      const token = await loginDemo(seeded.httpServer);
+      const listRes = await request(seeded.httpServer)
+        .get('/notifications')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const notifications = notificationListSchema.parse(listRes.body);
+      expect(notifications).toHaveLength(SEEDED_NOTIFICATION_COUNT);
+      // seeded read/archived state (c9 = archived + read).
+      expect(notifications.some((n) => n.archived && n.read)).toBe(true);
+      // an unread one exists to toggle.
+      const unread = notifications.find((n) => !n.read);
+      expect(unread).toBeDefined();
+
+      const patchRes = await request(seeded.httpServer)
+        .patch(`/notifications/${unread!.id}`)
+        .send({ read: true })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(notificationListSchema.element.parse(patchRes.body).read).toBe(true);
+    });
+
+    it('404s a PATCH to a notification the therapist does not own', async () => {
+      const token = await loginDemo(seeded.httpServer);
+      await request(seeded.httpServer)
+        .patch(`/notifications/${randomUUID()}`)
+        .send({ read: true })
         .set('Authorization', `Bearer ${token}`)
         .expect(404);
     });

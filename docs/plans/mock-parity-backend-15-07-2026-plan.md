@@ -168,8 +168,15 @@ Steps:
 | Milestone | Status | Notes |
 |---|---|---|
 | M1 Foundation (gating + identity + calendar) | DONE | SEED_DEMO_DATA + GUC-gated runner (`set_config(is_local)`), 0004 seeds therapist + 8 appts. Gate A passed (3 reviewers clean, security clean). 386 unit + 95 int green. |
-| M2 Sessions/summaries/transcripts/insights | TODO | |
+| M2 Sessions/summaries/transcripts/insights | BACKEND DONE | 0005 insight + 0006 seed (31 sessions) + GET /meetings/:id/transcript. 389 unit + 97 int green, live on Supabase. FE wiring → consolidated pass (see note). |
 | M3 Notifications | TODO | |
 | M4 Profile + settings | TODO | |
 | M5 Reports + notes + letters | TODO | |
 | M6 Integration + QA + close-out | TODO | |
+
+**Execution note (15-07-2026):** to avoid repeated React-skill context switches, the
+per-milestone SPA wiring is batched into ONE consolidated frontend pass ("M-FE") after
+the backend APIs (M2–M5) land. Each backend milestone still ships with its own tests +
+Gate A; M-FE wires all new endpoints (transcript, notifications, profile/settings, notes,
+letters, session detail) to the SPA at once, under `front-react-development` +
+`apps/web/CLAUDE.md`, then M6 runs integration + QA on the assembled system.
