@@ -66,6 +66,10 @@ config via `ConfigService` only, never `process.env` (sole exception:
   touch TypeORM directly — a `{feature}.repository.ts` owns queries. DTOs are
   classes with class-validator + `@ApiProperty`; every endpoint carries full
   Swagger decorators.
+- **Therapist-scope every meeting/patient-derived resource** (load-bearing —
+  violating it is an IDOR). `calendar_events.therapist_id` is the only owner
+  column; scope reads/writes by `@CurrentUser().userId` and return **404** (never
+  403) for non-owned rows. Reports are keyed per `(patient_id, therapist_id)`.
 - **New behavior ships with tests** — unit specs alongside code, integration
   specs in `apps/api/test/*.int-spec.ts` (shared bootstrap:
   `apps/api/test/utils/app-factory.ts`).
