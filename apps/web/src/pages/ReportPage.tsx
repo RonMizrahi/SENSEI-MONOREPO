@@ -290,7 +290,7 @@ export default function ReportPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {reportFailed && (
             <div role="status" style={{ background: 'var(--surface-2)', border: '1px solid var(--divider)', borderRadius: 10, padding: '12px 16px', color: 'var(--text-secondary)', fontSize: 13.5 }}>
-              יצירת הדוח החי אינה זמינה כרגע — מוצג תוכן לדוגמה.
+              יצירת הדוח החי אינה זמינה כרגע · מוצג תוכן לדוגמה.
             </div>
           )}
           <div style={{ background: 'var(--paper)', border: '1px solid var(--divider)', borderRadius: 10, boxShadow: CARD_SHADOW, padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
