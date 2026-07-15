@@ -3,6 +3,8 @@ import React from 'react';
 import { useApp } from '../../store/AppStore';
 import { EMAIL_RE } from '../../utils';
 import { restoreSession } from '../../services/mockAuth';
+import { isApiConfigured } from '../../services/apiClient';
+import { fetchProfile, updateProfile } from '../../services/profile';
 import { labelStyle } from '../../utils/styles';
 
 const inputStyle: React.CSSProperties = { width: '100%', height: 44, border: '1px solid var(--border-input)', borderRadius: 10, padding: '0 12px', fontSize: 14.5, outline: 'none' };
@@ -13,6 +15,25 @@ export default function ProfileTab() {
   const PS = S.profile;
   const PD = S.profileDraft;
   const setPD = (patch: any) => set((s: any) => ({ profileDraft: { ...s.profileDraft, ...patch } }));
+
+  // Load the real therapist profile into the store when wired to a backend, so the
+  // fields reflect the account (demo mode keeps the seeded profile). Runs once.
+  const apiMode = isApiConfigured();
+  React.useEffect(() => {
+    if (!apiMode) return undefined;
+    const ac = new AbortController();
+    fetchProfile(ac.signal)
+      .then((p) => {
+        const mapped = {
+          name: p.full_name ?? '', email: p.email, phone: p.phone ?? '', title: p.title ?? '',
+          gender: p.gender ?? '', license: p.license_number ?? '', org: p.org ?? '', bio: p.bio ?? '',
+        };
+        set((s: any) => ({ profile: { ...s.profile, ...mapped }, profileDraft: { ...s.profileDraft, ...mapped } }));
+      })
+      .catch(() => { /* keep the seeded profile */ });
+    return () => ac.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [apiMode]);
 
   const nameErr = !String(PD.name || '').trim() ? 'יש להזין שם מלא' : '';
   const emailErr = !String(PD.email || '').trim() ? 'יש להזין כתובת דוא״ל' : (!EMAIL_RE.test(String(PD.email).trim()) ? 'כתובת דוא״ל לא תקינה' : '');
@@ -36,6 +57,7 @@ export default function ProfileTab() {
       phone: String(PD.phone || '').trim(),
     };
     set({ profile: clean, profileDraft: clean, profileSaveTried: false });
+    if (apiMode) updateProfile({ full_name: clean.name, phone: clean.phone }).catch(() => { /* optimistic */ });
     toast('הפרופיל עודכן ונשמר');
   };
   const discardProfile = () => {
