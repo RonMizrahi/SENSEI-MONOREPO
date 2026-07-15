@@ -32,11 +32,7 @@ import {
 import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
 import { AudioService } from './audio.service';
-import {
-  AudioFileInfoDto,
-  AudioUploadResponseDto,
-  TranscriptionResponseDto,
-} from './dto/audio-response.dto';
+import { AudioUploadResponseDto, TranscriptionResponseDto } from './dto/audio-response.dto';
 import { UploadAudioDto } from './dto/upload-audio.dto';
 
 /** Audio endpoints — upload/transcribe meeting recordings (senseiAPI /audio parity). */
@@ -83,13 +79,6 @@ export class AudioController {
     @Body() fields: UploadAudioDto,
   ): Promise<AudioUploadResponseDto> {
     return this.audioService.upload(user, file, fields);
-  }
-
-  @Get()
-  @ApiOperation({ summary: 'List stored audio files' })
-  @ApiOkResponse({ type: [AudioFileInfoDto] })
-  list(): Promise<AudioFileInfoDto[]> {
-    return this.audioService.list();
   }
 
   @Get(':audioId')

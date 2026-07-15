@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
-import { mkdir, readdir, readFile, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import type { Env } from '../config/env.schema';
 import {
@@ -16,12 +16,6 @@ export interface SavedAudio {
   id: string;
   filename: string;
   contentType: string;
-  sizeBytes: number;
-}
-
-/** One file currently present in the upload directory. */
-export interface StoredAudioFile {
-  id: string;
   sizeBytes: number;
 }
 
@@ -58,22 +52,6 @@ export class AudioStorageService {
       contentType,
       sizeBytes: data.length,
     };
-  }
-
-  /** Lists the files currently in the upload directory (name-sorted). */
-  async list(): Promise<StoredAudioFile[]> {
-    let names: string[];
-    try {
-      names = await readdir(this.uploadDir);
-    } catch {
-      return [];
-    }
-    const files: StoredAudioFile[] = [];
-    for (const name of names.sort()) {
-      const fileStat = await stat(join(this.uploadDir, name)).catch(() => null);
-      if (fileStat?.isFile()) files.push({ id: name, sizeBytes: fileStat.size });
-    }
-    return files;
   }
 
   /** Reads a stored file's bytes, or null when the id is unsafe or missing. */

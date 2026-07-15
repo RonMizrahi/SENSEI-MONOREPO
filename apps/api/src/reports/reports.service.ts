@@ -47,7 +47,7 @@ export class ReportsService implements OnApplicationBootstrap {
     if (!(await this.reportsRepository.therapistHasMeetingWithPatient(patientId, user.userId))) {
       throw new ResourceNotFoundException('Next-meeting report for patient', patientId);
     }
-    const report = await this.reportsRepository.findByPatientId(patientId);
+    const report = await this.reportsRepository.findByPatientAndTherapist(patientId, user.userId);
     if (!report) throw new ResourceNotFoundException('Next-meeting report for patient', patientId);
     return this.toDto(report);
   }
@@ -63,7 +63,7 @@ export class ReportsService implements OnApplicationBootstrap {
     if (!(await this.reportsRepository.therapistHasMeetingWithPatient(patientId, user.userId))) {
       throw new ResourceNotFoundException('Patient', patientId);
     }
-    const pending = await this.reportsRepository.resetToPending(patientId);
+    const pending = await this.reportsRepository.resetToPending(patientId, user.userId);
     const runId = randomUUID();
     this.activeRuns.set(patientId, runId);
     // fire-and-forget: failures land on the row inside generate(); this catch
@@ -87,14 +87,14 @@ export class ReportsService implements OnApplicationBootstrap {
       const summaries = await this.reportsRepository.findReadySummaries(patientId, therapistId);
       if (!this.isCurrentRun(patientId, runId)) return;
       if (summaries.length === 0) {
-        await this.reportsRepository.markFailed(patientId, NO_SUMMARIES_ERROR);
+        await this.reportsRepository.markFailed(patientId, therapistId, NO_SUMMARIES_ERROR);
         return;
       }
-      await this.reportsRepository.markRunning(patientId);
+      await this.reportsRepository.markRunning(patientId, therapistId);
       const generated = await this.reportGenerator.generate(summaries);
       if (!this.isCurrentRun(patientId, runId)) return;
       const mostRecent = summaries[summaries.length - 1];
-      await this.reportsRepository.markReady(patientId, {
+      await this.reportsRepository.markReady(patientId, therapistId, {
         intro: generated.intro,
         changes: generated.changes,
         openTopics: generated.openTopics,
@@ -105,7 +105,7 @@ export class ReportsService implements OnApplicationBootstrap {
       });
     } catch (error) {
       if (!this.isCurrentRun(patientId, runId)) return;
-      await this.reportsRepository.markFailed(patientId, errorMessage(error));
+      await this.reportsRepository.markFailed(patientId, therapistId, errorMessage(error));
     } finally {
       // bounded map: forget the entry once the latest run settles
       if (this.isCurrentRun(patientId, runId)) this.activeRuns.delete(patientId);

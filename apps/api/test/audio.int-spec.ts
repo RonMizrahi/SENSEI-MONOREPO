@@ -6,7 +6,7 @@
 import { JwtService } from '@nestjs/jwt';
 import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, readFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import request from 'supertest';
@@ -35,10 +35,6 @@ const uploadResponseSchema = z.object({
   transcript_id: z.uuid(),
 });
 
-const audioListSchema = z.array(
-  z.object({ id: z.string().regex(STORED_AUDIO_ID), size_bytes: z.number().int().nonnegative() }),
-);
-
 const transcriptionResponseSchema = z.object({
   id: z.string().regex(STORED_AUDIO_ID),
   language: z.string(),
@@ -58,6 +54,7 @@ const SCRIBE_SUCCESS = {
 
 describe('audio (integration)', () => {
   let testApp: TestApp;
+  let uploadDir: string;
   let dataSource: DataSource;
   let token: string;
   let therapistId: string;
@@ -124,7 +121,7 @@ describe('audio (integration)', () => {
   }
 
   beforeAll(async () => {
-    const uploadDir = await mkdtemp(join(tmpdir(), 'audio-int-'));
+    uploadDir = await mkdtemp(join(tmpdir(), 'audio-int-'));
     testApp = await createIntegrationApp({
       UPLOAD_DIR: uploadDir,
       ELEVENLABS_API_KEY: 'int-test-key',
@@ -200,11 +197,7 @@ describe('audio (integration)', () => {
       ]);
 
       // The recording is transient — nothing left in the upload dir.
-      const list = await request(testApp.httpServer)
-        .get('/audio')
-        .set('Authorization', `Bearer ${token}`)
-        .expect(200);
-      expect(audioListSchema.parse(list.body)).toEqual([]);
+      await expect(readdir(uploadDir)).resolves.toEqual([]);
     });
 
     it('rejects a second transcript for the same meeting with 409', async () => {
@@ -273,16 +266,12 @@ describe('audio (integration)', () => {
       const meetingId = await createMeeting(null);
       await uploadRequest(meetingId).expect(502);
 
-      const list = await request(testApp.httpServer)
-        .get('/audio')
-        .set('Authorization', `Bearer ${token}`)
-        .expect(200);
-      const files = audioListSchema.parse(list.body);
+      const files = await readdir(uploadDir);
       expect(files).toHaveLength(1);
 
-      // Clean up the stranded file for the suite's other listing assertions.
+      // Clean up the stranded file for the suite's other assertions.
       await request(testApp.httpServer)
-        .delete(`/audio/${files[0].id}`)
+        .delete(`/audio/${files[0]}`)
         .set('Authorization', `Bearer ${token}`)
         .expect(204);
     });
@@ -342,13 +331,10 @@ describe('audio (integration)', () => {
       scribeResponse = () => new Response('upstream down', { status: 500 });
       await uploadRequest(await createMeeting(null)).expect(502);
       scribeResponse = () => new Response(JSON.stringify(SCRIBE_SUCCESS), { status: 200 });
-      const list = await request(testApp.httpServer)
-        .get('/audio')
-        .set('Authorization', `Bearer ${token}`)
-        .expect(200);
-      const files = audioListSchema.parse(list.body);
+      // No list endpoint by design — read the stranded file id straight off disk.
+      const files = await readdir(uploadDir);
       expect(files).toHaveLength(1);
-      return files[0].id;
+      return files[0];
     }
 
     it('GET /audio/{id} downloads the raw bytes; DELETE removes them', async () => {
@@ -367,6 +353,13 @@ describe('audio (integration)', () => {
         .expect(204);
       await request(testApp.httpServer)
         .delete(`/audio/${audioId}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
+    });
+
+    it('GET /audio is not a route — the raw-file enumeration vector is gone (404)', async () => {
+      await request(testApp.httpServer)
+        .get('/audio')
         .set('Authorization', `Bearer ${token}`)
         .expect(404);
     });

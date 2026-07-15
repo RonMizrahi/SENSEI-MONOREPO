@@ -51,19 +51,6 @@ describe('AudioStorageService', () => {
     });
   });
 
-  describe('list', () => {
-    it('returns an empty list when the directory does not exist', async () => {
-      const missing = new AudioStorageService(configFor(join(uploadDir, 'missing')));
-      await expect(missing.list()).resolves.toEqual([]);
-    });
-
-    it('lists stored files with their sizes', async () => {
-      const saved = await storage.save(Buffer.from('12345'), 'a.mp3', 'audio/mpeg');
-      const files = await storage.list();
-      expect(files).toEqual([{ id: saved.id, sizeBytes: 5 }]);
-    });
-  });
-
   describe('read', () => {
     it('returns the stored bytes', async () => {
       const saved = await storage.save(Buffer.from('hello'), 'a.mp3', 'audio/mpeg');
@@ -93,7 +80,7 @@ describe('AudioStorageService', () => {
       const saved = await storage.save(Buffer.from('abc'), 'a.mp3', 'audio/mpeg');
       await expect(storage.delete(saved.id)).resolves.toBe(true);
       await expect(storage.delete(saved.id)).resolves.toBe(false);
-      await expect(storage.list()).resolves.toEqual([]);
+      await expect(storage.read(saved.id)).resolves.toBeNull();
     });
 
     it('rejects traversal ids', async () => {

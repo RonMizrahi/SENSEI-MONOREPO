@@ -89,14 +89,27 @@ async function bootAppWithStub(databaseUri: string): Promise<{
   return { app, restore };
 }
 
-/** Applies 0001_init.sql when the schema is absent (no-op once the boot-time runner lands). */
+/** Applies the SQL migrations when absent (no-op once the boot-time runner lands). */
 async function ensureSchema(dataSource: DataSource): Promise<void> {
-  const existing = await dataSource.query<{ table: string | null }[]>(
+  const patients = await dataSource.query<{ table: string | null }[]>(
     "SELECT to_regclass('public.patients') AS table",
   );
-  if (existing[0]?.table) return;
-  const sql = readFileSync(join(__dirname, '../db/migrations/0001_init.sql'), 'utf8');
-  await dataSource.query(sql);
+  if (!patients[0]?.table) {
+    const sql = readFileSync(join(__dirname, '../db/migrations/0001_init.sql'), 'utf8');
+    await dataSource.query(sql);
+  }
+  // Apply 0002 (per-therapist reports) when its column is not yet present.
+  const scoped = await dataSource.query<{ column: string | null }[]>(
+    `SELECT column_name AS column FROM information_schema.columns
+     WHERE table_name = 'patient_reports' AND column_name = 'therapist_id'`,
+  );
+  if (!scoped[0]?.column) {
+    const sql = readFileSync(
+      join(__dirname, '../db/migrations/0002_patient_reports_per_therapist.sql'),
+      'utf8',
+    );
+    await dataSource.query(sql);
+  }
 }
 
 /**
@@ -366,7 +379,7 @@ describe('reports (integration)', () => {
       expect(reportSchema.parse(settled.body).status).toBe('ready');
     });
 
-    it('never aggregates another therapist’s summaries — B’s report excludes A’s content', async () => {
+    it('never aggregates another therapist’s summaries — B with no summary of their own fails', async () => {
       const patientId = await seedPatientWithReadySummaryForA();
       // B has their own meeting with the shared patient, but NO ready summary of their own.
       await seedMeetingFor(otherUserId, patientId, '2026-06-05T10:00:00Z');
@@ -381,6 +394,52 @@ describe('reports (integration)', () => {
         status: 'failed',
         error: NO_SUMMARIES_ERROR,
       });
+    });
+
+    it('two therapists sharing a patient each get their OWN report row (no collision, no leak)', async () => {
+      // A owns a meeting + ready summary with the shared-roster patient.
+      const patientId = await seedPatient();
+      const aMeeting = await seedMeeting(patientId, '2026-05-05T10:00:00Z');
+      await seedSummary(aMeeting, 'ready', 'התוכן הקליני של מטפל א׳');
+
+      // B legitimately shares the patient: B has their OWN meeting + OWN ready summary.
+      const bMeeting = await seedMeetingFor(otherUserId, patientId, '2026-06-05T10:00:00Z');
+      await seedSummary(bMeeting, 'ready', 'התוכן הקליני של מטפל ב׳');
+
+      // A generates and reads their report first.
+      await request(httpServer)
+        .post(pathFor(patientId))
+        .set('Authorization', `Bearer ${token}`)
+        .expect(202);
+      const aReport = reportSchema.parse((await pollUntilSettled(patientId)).body);
+
+      // B's POST must NOT clobber A's row; B operates on B's own row.
+      await request(httpServer)
+        .post(pathFor(patientId))
+        .set('Authorization', `Bearer ${otherToken}`)
+        .expect(202);
+      const bReport = reportSchema.parse((await pollUntilSettledAs(patientId, otherToken)).body);
+
+      // B's report is built from B's OWN summaries: only B's meeting id, B's excerpt.
+      expect(bReport.status).toBe('ready');
+      expect(bReport.source_meeting_ids).toEqual([bMeeting]);
+      expect(bReport.source_meeting_ids).not.toContain(aMeeting);
+      expect(bReport.last_summary_excerpt).toBe('התוכן הקליני של מטפל ב׳');
+      expect(bReport.last_summary_excerpt).not.toBe('התוכן הקליני של מטפל א׳');
+
+      // A's row survived B's POST unchanged — A still sees A's own meeting ids only.
+      const aReread = reportSchema.parse(
+        (
+          await request(httpServer)
+            .get(pathFor(patientId))
+            .set('Authorization', `Bearer ${token}`)
+            .expect(200)
+        ).body,
+      );
+      expect(aReread.source_meeting_ids).toEqual(aReport.source_meeting_ids);
+      expect(aReread.source_meeting_ids).toContain(aMeeting);
+      expect(aReread.source_meeting_ids).not.toContain(bMeeting);
+      expect(aReread.last_summary_excerpt).toBe('התוכן הקליני של מטפל א׳');
     });
   });
 });

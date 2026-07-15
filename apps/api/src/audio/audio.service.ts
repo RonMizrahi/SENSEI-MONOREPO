@@ -15,11 +15,7 @@ import {
 } from '../transcription/transcription.provider';
 import { ALLOWED_AUDIO_TYPES, DEFAULT_MIME_TYPE, MIME_BY_EXTENSION } from './audio.constants';
 import { AudioStorageService } from './audio-storage.service';
-import {
-  AudioFileInfoDto,
-  AudioUploadResponseDto,
-  TranscriptionResponseDto,
-} from './dto/audio-response.dto';
+import { AudioUploadResponseDto, TranscriptionResponseDto } from './dto/audio-response.dto';
 import { UploadAudioDto } from './dto/upload-audio.dto';
 import { UPLOAD_TARGETS_REPOSITORY, type UploadTargetsRepository } from './audio.repository';
 
@@ -89,12 +85,6 @@ export class AudioService {
       meeting_id: transcript.meetingId,
       transcript_id: transcript.id,
     };
-  }
-
-  /** Lists the audio files currently in the upload directory. */
-  async list(): Promise<AudioFileInfoDto[]> {
-    const files = await this.storage.list();
-    return files.map((file) => ({ id: file.id, size_bytes: file.sizeBytes }));
   }
 
   /**

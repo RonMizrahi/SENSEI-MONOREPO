@@ -4,12 +4,28 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DataSource } from 'typeorm';
 
-/** File where global-setup publishes the shared container's admin connection URI. */
+/** Env var global-setup uses to publish the shared container URI (same process under --runInBand). */
+export const SHARED_URI_ENV = '__SENSEI_TEST_PG_URI__';
+
+/** File fallback for the shared URI (covers non-runInBand workers, which don't inherit env). */
 export const SHARED_URI_FILE = join(tmpdir(), 'sensei-int-pg-uri');
 
-/** The shared Testcontainers Postgres admin URI (written by global-setup). */
+/**
+ * The shared Testcontainers Postgres admin URI (published by global-setup).
+ * Prefers the per-process env var (collision-free) and falls back to the file.
+ * @throws Error with actionable guidance when neither is present.
+ */
 export function sharedAdminUri(): string {
-  return readFileSync(SHARED_URI_FILE, 'utf8').trim();
+  const fromEnv = process.env[SHARED_URI_ENV];
+  if (fromEnv) return fromEnv;
+  try {
+    return readFileSync(SHARED_URI_FILE, 'utf8').trim();
+  } catch {
+    throw new Error(
+      'Shared Postgres not initialized — run integration tests via `pnpm --filter api test:int` ' +
+        '(the jest-int globalSetup starts the shared container).',
+    );
+  }
 }
 
 /** Rewrites a connection URI to point at a different database on the same server. */

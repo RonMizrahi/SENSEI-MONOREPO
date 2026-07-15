@@ -59,16 +59,16 @@ export interface ReportsRepository {
   patientExists(patientId: string): Promise<boolean>;
   /** Whether the therapist owns at least one meeting with the patient. */
   therapistHasMeetingWithPatient(patientId: string, therapistId: string): Promise<boolean>;
-  /** The patient's report row, or null when none was ever requested. */
-  findByPatientId(patientId: string): Promise<PatientReport | null>;
-  /** Creates or wipes the patient's report row back to a clean 'pending' state. */
-  resetToPending(patientId: string): Promise<PatientReport>;
-  /** Marks the patient's report row 'running'. */
-  markRunning(patientId: string): Promise<void>;
-  /** Marks the patient's report row 'ready' with the generated content. */
-  markReady(patientId: string, fields: ReadyReportFields): Promise<void>;
-  /** Marks the patient's report row 'failed' with a user-facing error. */
-  markFailed(patientId: string, error: string): Promise<void>;
+  /** The therapist's own report row for the patient, or null when none was requested. */
+  findByPatientAndTherapist(patientId: string, therapistId: string): Promise<PatientReport | null>;
+  /** Creates or wipes the therapist's own report row back to a clean 'pending' state. */
+  resetToPending(patientId: string, therapistId: string): Promise<PatientReport>;
+  /** Marks the therapist's own report row 'running'. */
+  markRunning(patientId: string, therapistId: string): Promise<void>;
+  /** Marks the therapist's own report row 'ready' with the generated content. */
+  markReady(patientId: string, therapistId: string, fields: ReadyReportFields): Promise<void>;
+  /** Marks the therapist's own report row 'failed' with a user-facing error. */
+  markFailed(patientId: string, therapistId: string, error: string): Promise<void>;
   /** The therapist's READY summaries for the patient, ordered by start time (oldest first). */
   findReadySummaries(patientId: string, therapistId: string): Promise<ReadyMeetingSummary[]>;
   /**
@@ -95,32 +95,46 @@ export class TypeormReportsRepository implements ReportsRepository {
       .exists({ where: { patientId, therapistId } });
   }
 
-  /** The patient's report row, or null when none was ever requested. */
-  findByPatientId(patientId: string): Promise<PatientReport | null> {
-    return this.dataSource.getRepository(PatientReport).findOne({ where: { patientId } });
+  /** The therapist's own report row for the patient, or null when none was requested. */
+  findByPatientAndTherapist(
+    patientId: string,
+    therapistId: string,
+  ): Promise<PatientReport | null> {
+    return this.dataSource
+      .getRepository(PatientReport)
+      .findOne({ where: { patientId, therapistId } });
   }
 
-  /** Creates or wipes the patient's report row back to a clean 'pending' state (atomic upsert). */
-  async resetToPending(patientId: string): Promise<PatientReport> {
+  /** Creates or wipes the therapist's own report row back to a clean 'pending' state (atomic upsert). */
+  async resetToPending(patientId: string, therapistId: string): Promise<PatientReport> {
     const repository = this.dataSource.getRepository(PatientReport);
-    // ON CONFLICT (patient_id) DO UPDATE — concurrent first POSTs cannot violate the unique key
-    await repository.upsert({ patientId, ...pendingResetFields() }, ['patientId']);
-    const report = await repository.findOne({ where: { patientId } });
-    if (!report) throw new Error(`patient report upsert did not persist for ${patientId}`);
+    // ON CONFLICT (patient_id, therapist_id) DO UPDATE — concurrent first POSTs cannot violate the key
+    await repository.upsert({ patientId, therapistId, ...pendingResetFields() }, [
+      'patientId',
+      'therapistId',
+    ]);
+    const report = await repository.findOne({ where: { patientId, therapistId } });
+    if (!report) {
+      throw new Error(`patient report upsert did not persist for ${patientId}/${therapistId}`);
+    }
     return report;
   }
 
-  /** Marks the patient's report row 'running'. */
-  async markRunning(patientId: string): Promise<void> {
+  /** Marks the therapist's own report row 'running'. */
+  async markRunning(patientId: string, therapistId: string): Promise<void> {
     await this.dataSource
       .getRepository(PatientReport)
-      .update({ patientId }, { status: STATUS_RUNNING });
+      .update({ patientId, therapistId }, { status: STATUS_RUNNING });
   }
 
-  /** Marks the patient's report row 'ready' with the generated content. */
-  async markReady(patientId: string, fields: ReadyReportFields): Promise<void> {
+  /** Marks the therapist's own report row 'ready' with the generated content. */
+  async markReady(
+    patientId: string,
+    therapistId: string,
+    fields: ReadyReportFields,
+  ): Promise<void> {
     await this.dataSource.getRepository(PatientReport).update(
-      { patientId },
+      { patientId, therapistId },
       {
         status: STATUS_READY,
         intro: fields.intro,
@@ -135,11 +149,11 @@ export class TypeormReportsRepository implements ReportsRepository {
     );
   }
 
-  /** Marks the patient's report row 'failed' with a user-facing error. */
-  async markFailed(patientId: string, error: string): Promise<void> {
+  /** Marks the therapist's own report row 'failed' with a user-facing error. */
+  async markFailed(patientId: string, therapistId: string, error: string): Promise<void> {
     await this.dataSource
       .getRepository(PatientReport)
-      .update({ patientId }, { status: STATUS_FAILED, error });
+      .update({ patientId, therapistId }, { status: STATUS_FAILED, error });
   }
 
   /** The therapist's READY summaries for the patient, ordered by start time (oldest first). */

@@ -5,6 +5,9 @@ import { DataSource } from 'typeorm';
 import { createIntegrationApp, TestApp } from './utils/app-factory';
 
 const INIT_MIGRATION = '0001_init.sql';
+const REPORTS_PER_THERAPIST_MIGRATION = '0002_patient_reports_per_therapist.sql';
+// Every versioned SQL file the boot-time runner applies, in filename order.
+const EXPECTED_MIGRATIONS = [INIT_MIGRATION, REPORTS_PER_THERAPIST_MIGRATION];
 const EXPECTED_TABLES = [
   '_migrations',
   'users',
@@ -60,7 +63,7 @@ describe('db migration runner (integration)', () => {
     }
   });
 
-  it('first boot applies 0001_init.sql: all schema tables plus _migrations exist', async () => {
+  it('first boot applies every migration: all schema tables plus _migrations exist', async () => {
     if (!firstApp) throw new Error('first app did not boot');
     const dataSource = firstApp.app.get(DataSource);
 
@@ -69,7 +72,7 @@ describe('db migration runner (integration)', () => {
       expect(tables).toContain(table);
     }
 
-    await expect(listAppliedMigrations(dataSource)).resolves.toEqual([INIT_MIGRATION]);
+    await expect(listAppliedMigrations(dataSource)).resolves.toEqual(EXPECTED_MIGRATIONS);
   });
 
   it('re-boot on the same database succeeds and records nothing new', async () => {
@@ -82,6 +85,6 @@ describe('db migration runner (integration)', () => {
 
     secondApp = await createIntegrationApp({ DATABASE_URL: databaseUrl });
     const dataSource = secondApp.app.get(DataSource);
-    await expect(listAppliedMigrations(dataSource)).resolves.toEqual([INIT_MIGRATION]);
+    await expect(listAppliedMigrations(dataSource)).resolves.toEqual(EXPECTED_MIGRATIONS);
   });
 });

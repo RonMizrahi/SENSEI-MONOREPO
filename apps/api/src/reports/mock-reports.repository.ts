@@ -15,6 +15,11 @@ import { STATUS_FAILED, STATUS_READY, STATUS_RUNNING } from './reports.constants
 export class MockReportsRepository implements ReportsRepository {
   private readonly reports = new Map<string, PatientReport>();
 
+  /** Composite in-memory key mirroring the (patient_id, therapist_id) unique row. */
+  private keyFor(patientId: string, therapistId: string): string {
+    return `${patientId}:${therapistId}`;
+  }
+
   /** Whether the id belongs to a seeded demo patient. */
   patientExists(patientId: string): Promise<boolean> {
     return Promise.resolve(SEED_PATIENTS.some((patient) => patient.id === patientId));
@@ -27,29 +32,34 @@ export class MockReportsRepository implements ReportsRepository {
     );
   }
 
-  /** The patient's report row, or null when none was ever requested. */
-  findByPatientId(patientId: string): Promise<PatientReport | null> {
-    return Promise.resolve(this.reports.get(patientId) ?? null);
+  /** The therapist's own report row for the patient, or null when none was requested. */
+  findByPatientAndTherapist(
+    patientId: string,
+    therapistId: string,
+  ): Promise<PatientReport | null> {
+    return Promise.resolve(this.reports.get(this.keyFor(patientId, therapistId)) ?? null);
   }
 
-  /** Creates or wipes the patient's report row back to a clean 'pending' state. */
-  resetToPending(patientId: string): Promise<PatientReport> {
-    const existing = this.reports.get(patientId);
+  /** Creates or wipes the therapist's own report row back to a clean 'pending' state. */
+  resetToPending(patientId: string, therapistId: string): Promise<PatientReport> {
+    const key = this.keyFor(patientId, therapistId);
+    const existing = this.reports.get(key);
     const report = existing ?? new PatientReport();
     if (!existing) {
       report.id = randomUUID();
       report.patientId = patientId;
+      report.therapistId = therapistId;
       report.createdAt = new Date();
     }
     Object.assign(report, pendingResetFields());
     report.updatedAt = new Date();
-    this.reports.set(patientId, report);
+    this.reports.set(key, report);
     return Promise.resolve(report);
   }
 
-  /** Marks the patient's report row 'running'. */
-  markRunning(patientId: string): Promise<void> {
-    const report = this.reports.get(patientId);
+  /** Marks the therapist's own report row 'running'. */
+  markRunning(patientId: string, therapistId: string): Promise<void> {
+    const report = this.reports.get(this.keyFor(patientId, therapistId));
     if (report) {
       report.status = STATUS_RUNNING;
       report.updatedAt = new Date();
@@ -57,9 +67,9 @@ export class MockReportsRepository implements ReportsRepository {
     return Promise.resolve();
   }
 
-  /** Marks the patient's report row 'ready' with the generated content. */
-  markReady(patientId: string, fields: ReadyReportFields): Promise<void> {
-    const report = this.reports.get(patientId);
+  /** Marks the therapist's own report row 'ready' with the generated content. */
+  markReady(patientId: string, therapistId: string, fields: ReadyReportFields): Promise<void> {
+    const report = this.reports.get(this.keyFor(patientId, therapistId));
     if (report) {
       report.status = STATUS_READY;
       report.intro = fields.intro;
@@ -75,9 +85,9 @@ export class MockReportsRepository implements ReportsRepository {
     return Promise.resolve();
   }
 
-  /** Marks the patient's report row 'failed' with a user-facing error. */
-  markFailed(patientId: string, error: string): Promise<void> {
-    const report = this.reports.get(patientId);
+  /** Marks the therapist's own report row 'failed' with a user-facing error. */
+  markFailed(patientId: string, therapistId: string, error: string): Promise<void> {
+    const report = this.reports.get(this.keyFor(patientId, therapistId));
     if (report) {
       report.status = STATUS_FAILED;
       report.error = error;

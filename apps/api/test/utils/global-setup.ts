@@ -1,6 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import { PostgreSqlContainer } from '@testcontainers/postgresql';
-import { SHARED_URI_FILE } from './shared-postgres';
+import { SHARED_URI_ENV, SHARED_URI_FILE } from './shared-postgres';
 
 /**
  * Starts ONE Postgres container for the whole integration run; each suite
@@ -10,5 +10,8 @@ import { SHARED_URI_FILE } from './shared-postgres';
 export default async function globalSetup(): Promise<void> {
   const container = await new PostgreSqlContainer('postgres:18-alpine').start();
   (globalThis as { __SENSEI_PG__?: unknown }).__SENSEI_PG__ = container;
-  writeFileSync(SHARED_URI_FILE, container.getConnectionUri());
+  const uri = container.getConnectionUri();
+  // env is per-process (collision-free across concurrent runs); file is the fallback.
+  process.env[SHARED_URI_ENV] = uri;
+  writeFileSync(SHARED_URI_FILE, uri);
 }

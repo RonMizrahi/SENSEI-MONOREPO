@@ -30,18 +30,6 @@ export class AudioUploadResponseDto {
   transcript_id!: string;
 }
 
-/** One stored audio file, as listed by GET /audio. */
-export class AudioFileInfoDto {
-  @ApiProperty({
-    description: 'Stored audio id ({uuid-hex}{ext})',
-    example: '3f2b8c1d9a4e4f6a8b0c1d2e3f405162.mp3',
-  })
-  id!: string;
-
-  @ApiProperty({ description: 'File size in bytes', example: 524288 })
-  size_bytes!: number;
-}
-
 /** One transcribed word with second-offsets from the start of the audio. */
 export class TranscribedWordDto {
   @ApiProperty({ description: 'The word text', example: 'שלום' })

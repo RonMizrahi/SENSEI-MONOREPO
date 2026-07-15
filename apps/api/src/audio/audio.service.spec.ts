@@ -59,7 +59,7 @@ async function expectHttpStatus(promise: Promise<unknown>, status: number): Prom
 
 describe('AudioService', () => {
   let storage: jest.Mocked<
-    Pick<AudioStorageService, 'save' | 'list' | 'read' | 'delete' | 'isSafeId'>
+    Pick<AudioStorageService, 'save' | 'read' | 'delete' | 'isSafeId'>
   >;
   let transcriber: jest.Mocked<TranscriptionProvider>;
   let transcripts: jest.Mocked<TranscriptStore>;
@@ -92,7 +92,6 @@ describe('AudioService', () => {
         contentType: 'audio/mpeg',
         sizeBytes: 4,
       }),
-      list: jest.fn().mockResolvedValue([]),
       read: jest.fn().mockResolvedValue(null),
       delete: jest.fn().mockResolvedValue(true),
       isSafeId: jest.fn().mockReturnValue(true),
@@ -295,15 +294,6 @@ describe('AudioService', () => {
       expect(storage.delete).not.toHaveBeenCalled();
       expect(transcripts.create).not.toHaveBeenCalled();
       expect(summaryQueue.enqueue).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('list', () => {
-    it('maps stored files to the wire shape', async () => {
-      storage.list.mockResolvedValue([{ id: `${'b'.repeat(32)}.wav`, sizeBytes: 9 }]);
-      await expect(buildService().list()).resolves.toEqual([
-        { id: `${'b'.repeat(32)}.wav`, size_bytes: 9 },
-      ]);
     });
   });
 

@@ -66,21 +66,26 @@ describe('TypeormReportsRepository', () => {
     expect(repoMock.exists).toHaveBeenCalledWith({ where: { patientId, therapistId } });
   });
 
-  it('findByPatientId queries by the patient id', async () => {
+  it('findByPatientAndTherapist queries by the patient AND therapist id', async () => {
     const patientId = randomUUID();
+    const therapistId = randomUUID();
     repoMock.findOne.mockResolvedValue(null);
-    await expect(repository.findByPatientId(patientId)).resolves.toBeNull();
-    expect(repoMock.findOne).toHaveBeenCalledWith({ where: { patientId } });
+    await expect(
+      repository.findByPatientAndTherapist(patientId, therapistId),
+    ).resolves.toBeNull();
+    expect(repoMock.findOne).toHaveBeenCalledWith({ where: { patientId, therapistId } });
   });
 
-  it('resetToPending upserts a clean pending row keyed on patientId and returns it', async () => {
+  it('resetToPending upserts a clean pending row keyed on (patient, therapist) and returns it', async () => {
     const patientId = randomUUID();
-    const row = Object.assign(new PatientReport(), { id: randomUUID(), patientId });
+    const therapistId = randomUUID();
+    const row = Object.assign(new PatientReport(), { id: randomUUID(), patientId, therapistId });
     repoMock.findOne.mockResolvedValue(row);
-    const saved = await repository.resetToPending(patientId);
+    const saved = await repository.resetToPending(patientId, therapistId);
     expect(repoMock.upsert).toHaveBeenCalledWith(
       {
         patientId,
+        therapistId,
         status: 'pending',
         intro: null,
         changes: [],
@@ -91,26 +96,36 @@ describe('TypeormReportsRepository', () => {
         model: '',
         error: null,
       },
-      ['patientId'],
+      ['patientId', 'therapistId'],
     );
+    expect(repoMock.findOne).toHaveBeenCalledWith({ where: { patientId, therapistId } });
     expect(saved).toBe(row);
   });
 
   it('resetToPending throws when the upserted row cannot be read back', async () => {
     repoMock.findOne.mockResolvedValue(null);
-    await expect(repository.resetToPending(randomUUID())).rejects.toThrow('did not persist');
+    await expect(repository.resetToPending(randomUUID(), randomUUID())).rejects.toThrow(
+      'did not persist',
+    );
   });
 
-  it('mark transitions issue targeted updates', async () => {
+  it('mark transitions issue targeted updates scoped to (patient, therapist)', async () => {
     const patientId = randomUUID();
-    await repository.markRunning(patientId);
-    expect(repoMock.update).toHaveBeenCalledWith({ patientId }, { status: 'running' });
+    const therapistId = randomUUID();
+    await repository.markRunning(patientId, therapistId);
+    expect(repoMock.update).toHaveBeenCalledWith(
+      { patientId, therapistId },
+      { status: 'running' },
+    );
 
-    await repository.markFailed(patientId, 'נכשל');
-    expect(repoMock.update).toHaveBeenCalledWith({ patientId }, { status: 'failed', error: 'נכשל' });
+    await repository.markFailed(patientId, therapistId, 'נכשל');
+    expect(repoMock.update).toHaveBeenCalledWith(
+      { patientId, therapistId },
+      { status: 'failed', error: 'נכשל' },
+    );
 
     const generatedAt = new Date();
-    await repository.markReady(patientId, {
+    await repository.markReady(patientId, therapistId, {
       intro: 'מבוא',
       changes: ['שינוי'],
       openTopics: ['נושא'],
@@ -120,7 +135,7 @@ describe('TypeormReportsRepository', () => {
       model: 'claude-test',
     });
     expect(repoMock.update).toHaveBeenCalledWith(
-      { patientId },
+      { patientId, therapistId },
       expect.objectContaining({ status: 'ready', intro: 'מבוא', generatedAt, error: null }),
     );
   });

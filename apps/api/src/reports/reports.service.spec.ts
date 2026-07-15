@@ -64,7 +64,7 @@ describe('ReportsService', () => {
     repository = {
       patientExists: jest.fn(),
       therapistHasMeetingWithPatient: jest.fn().mockResolvedValue(true),
-      findByPatientId: jest.fn(),
+      findByPatientAndTherapist: jest.fn(),
       resetToPending: jest.fn(),
       markRunning: jest.fn().mockResolvedValue(undefined),
       markReady: jest.fn().mockResolvedValue(undefined),
@@ -86,11 +86,11 @@ describe('ReportsService', () => {
       await expect(service.getReport(user, randomUUID())).rejects.toBeInstanceOf(
         ResourceNotFoundException,
       );
-      expect(repository.findByPatientId).not.toHaveBeenCalled();
+      expect(repository.findByPatientAndTherapist).not.toHaveBeenCalled();
     });
 
     it('throws 404 when no report row exists', async () => {
-      repository.findByPatientId.mockResolvedValue(null);
+      repository.findByPatientAndTherapist.mockResolvedValue(null);
       await expect(service.getReport(user, randomUUID())).rejects.toBeInstanceOf(
         ResourceNotFoundException,
       );
@@ -107,7 +107,7 @@ describe('ReportsService', () => {
       row.lastSummaryExcerpt = 'תקציר';
       row.generatedAt = new Date('2026-07-14T10:00:00Z');
       row.model = 'claude-test';
-      repository.findByPatientId.mockResolvedValue(row);
+      repository.findByPatientAndTherapist.mockResolvedValue(row);
 
       const dto = await service.getReport(user, patientId);
       expect(dto).toEqual({
@@ -126,7 +126,7 @@ describe('ReportsService', () => {
 
     it('maps an empty model to null while pending', async () => {
       const patientId = randomUUID();
-      repository.findByPatientId.mockResolvedValue(pendingRow(patientId));
+      repository.findByPatientAndTherapist.mockResolvedValue(pendingRow(patientId));
       const dto = await service.getReport(user, patientId);
       expect(dto.model).toBeNull();
       expect(dto.generated_at).toBeNull();
@@ -179,9 +179,10 @@ describe('ReportsService', () => {
       expect(dto.patient_id).toBe(patientId);
 
       await flushAsync();
-      expect(repository.markRunning).toHaveBeenCalledWith(patientId);
+      expect(repository.markRunning).toHaveBeenCalledWith(patientId, user.userId);
       expect(repository.markReady).toHaveBeenCalledWith(
         patientId,
+        user.userId,
         expect.objectContaining({
           intro: generated.intro,
           changes: generated.changes,
@@ -207,6 +208,7 @@ describe('ReportsService', () => {
       await flushAsync();
       expect(repository.markReady).toHaveBeenCalledWith(
         patientId,
+        user.userId,
         expect.objectContaining({
           lastSummaryExcerpt: longText.slice(0, EXCERPT_MAX_CHARS),
         }),
@@ -221,7 +223,11 @@ describe('ReportsService', () => {
 
       await service.requestReport(user, patientId);
       await flushAsync();
-      expect(repository.markFailed).toHaveBeenCalledWith(patientId, NO_SUMMARIES_ERROR);
+      expect(repository.markFailed).toHaveBeenCalledWith(
+        patientId,
+        user.userId,
+        NO_SUMMARIES_ERROR,
+      );
       expect(repository.markRunning).not.toHaveBeenCalled();
       expect(generator.generate).not.toHaveBeenCalled();
     });
@@ -235,7 +241,11 @@ describe('ReportsService', () => {
 
       await service.requestReport(user, patientId);
       await flushAsync();
-      expect(repository.markFailed).toHaveBeenCalledWith(patientId, 'anthropic exploded');
+      expect(repository.markFailed).toHaveBeenCalledWith(
+        patientId,
+        user.userId,
+        'anthropic exploded',
+      );
     });
 
     it('marks the row failed when persisting the ready result throws', async () => {
@@ -248,7 +258,7 @@ describe('ReportsService', () => {
 
       await service.requestReport(user, patientId);
       await flushAsync();
-      expect(repository.markFailed).toHaveBeenCalledWith(patientId, 'db write failed');
+      expect(repository.markFailed).toHaveBeenCalledWith(patientId, user.userId, 'db write failed');
     });
 
     it('a superseded (stale) run never writes over the newer run', async () => {
