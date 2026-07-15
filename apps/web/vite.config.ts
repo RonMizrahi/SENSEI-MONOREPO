@@ -13,6 +13,8 @@ export default defineConfig({
     setupFiles: ['tests/setup.ts'],
     globals: true,
     css: false,
+    // Playwright e2e (e2e/*.e2e.ts) runs via `npm run e2e`, never under vitest.
+    exclude: ['node_modules/**', 'dist/**', 'e2e/**'],
     coverage: {
       provider: 'v8',
       reporter: ['text-summary', 'json-summary'],
