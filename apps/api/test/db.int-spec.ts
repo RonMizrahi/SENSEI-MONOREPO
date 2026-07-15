@@ -6,8 +6,13 @@ import { createIntegrationApp, TestApp } from './utils/app-factory';
 
 const INIT_MIGRATION = '0001_init.sql';
 const REPORTS_PER_THERAPIST_MIGRATION = '0002_patient_reports_per_therapist.sql';
+const SEED_DEMO_PROTOTYPE_MIGRATION = '0003_seed_demo_prototype.sql';
 // Every versioned SQL file the boot-time runner applies, in filename order.
-const EXPECTED_MIGRATIONS = [INIT_MIGRATION, REPORTS_PER_THERAPIST_MIGRATION];
+const EXPECTED_MIGRATIONS = [
+  INIT_MIGRATION,
+  REPORTS_PER_THERAPIST_MIGRATION,
+  SEED_DEMO_PROTOTYPE_MIGRATION,
+];
 const EXPECTED_TABLES = [
   '_migrations',
   'users',
