@@ -85,6 +85,20 @@ const profileSchema = z.object({
   created_at: z.iso.datetime(),
 });
 const settingsSchema = z.object({ preferences: z.record(z.string(), z.unknown()) });
+const reportSchema = z.object({
+  patient_id: z.uuid(),
+  status: z.enum(['pending', 'running', 'ready', 'failed']),
+  intro: z.string().nullable(),
+  changes: z.array(z.string()),
+  open_topics: z.array(z.string()),
+  questions: z.array(z.string()),
+});
+const noteSchema = z.object({
+  patient_id: z.uuid(),
+  body: z.string(),
+  updated_at: z.iso.datetime().nullable(),
+});
+const DEMO_PATIENT_ID = '00000000-0000-4000-8000-0000000000a1';
 // The seeded past sessions fall in this window (SESSION_DATES: May–Jun 2026).
 const PAST_FROM = '2026-05-01';
 const PAST_TO = '2026-06-30';
@@ -111,9 +125,12 @@ async function loginDemo(httpServer: App): Promise<string> {
 describe('demo-data seed gating (integration)', () => {
   describe('SEED_DEMO_DATA=true', () => {
     let seeded: TestApp;
+    // Log in ONCE and reuse — per-test /auth/token calls trip the throttler (429).
+    let token: string;
 
     beforeAll(async () => {
       seeded = await createIntegrationApp({ SEED_DEMO_DATA: 'true' });
+      token = await loginDemo(seeded.httpServer);
     });
 
     afterAll(async () => {
@@ -121,7 +138,6 @@ describe('demo-data seed gating (integration)', () => {
     });
 
     it('seeds the demo therapist whose credentials log in', async () => {
-      const token = await loginDemo(seeded.httpServer);
       const res = await request(seeded.httpServer)
         .get('/auth/whoami')
         .set('Authorization', `Bearer ${token}`)
@@ -131,7 +147,6 @@ describe('demo-data seed gating (integration)', () => {
     });
 
     it('exposes the seeded patient roster', async () => {
-      const token = await loginDemo(seeded.httpServer);
       const res = await request(seeded.httpServer)
         .get('/patients')
         .set('Authorization', `Bearer ${token}`)
@@ -144,7 +159,6 @@ describe('demo-data seed gating (integration)', () => {
     });
 
     it('exposes the 8 seeded appointments, therapist-scoped', async () => {
-      const token = await loginDemo(seeded.httpServer);
       const res = await request(seeded.httpServer)
         .get('/calendar')
         .query({ from: isoDate(0), to: isoDate(CALENDAR_WINDOW_DAYS), time_zone: 'Asia/Jerusalem' })
@@ -158,7 +172,6 @@ describe('demo-data seed gating (integration)', () => {
     });
 
     it('materializes past sessions with a ready summary (+insight) and transcript', async () => {
-      const token = await loginDemo(seeded.httpServer);
       const cal = await request(seeded.httpServer)
         .get('/calendar')
         .query({ from: PAST_FROM, to: PAST_TO, time_zone: 'Asia/Jerusalem' })
@@ -188,7 +201,6 @@ describe('demo-data seed gating (integration)', () => {
     });
 
     it('404s a transcript for a meeting the therapist does not own', async () => {
-      const token = await loginDemo(seeded.httpServer);
       await request(seeded.httpServer)
         .get(`/meetings/${randomUUID()}/transcript`)
         .set('Authorization', `Bearer ${token}`)
@@ -196,7 +208,6 @@ describe('demo-data seed gating (integration)', () => {
     });
 
     it('lists the 9 seeded notifications, newest first, and toggles one', async () => {
-      const token = await loginDemo(seeded.httpServer);
       const listRes = await request(seeded.httpServer)
         .get('/notifications')
         .set('Authorization', `Bearer ${token}`)
@@ -218,7 +229,6 @@ describe('demo-data seed gating (integration)', () => {
     });
 
     it('404s a PATCH to a notification the therapist does not own', async () => {
-      const token = await loginDemo(seeded.httpServer);
       await request(seeded.httpServer)
         .patch(`/notifications/${randomUUID()}`)
         .send({ read: true })
@@ -227,7 +237,6 @@ describe('demo-data seed gating (integration)', () => {
     });
 
     it('serves the seeded profile and applies an edit', async () => {
-      const token = await loginDemo(seeded.httpServer);
       const getRes = await request(seeded.httpServer)
         .get('/auth/me')
         .set('Authorization', `Bearer ${token}`)
@@ -249,7 +258,6 @@ describe('demo-data seed gating (integration)', () => {
     });
 
     it('serves the seeded preferences and replaces them', async () => {
-      const token = await loginDemo(seeded.httpServer);
       const getRes = await request(seeded.httpServer)
         .get('/settings')
         .set('Authorization', `Bearer ${token}`)
@@ -264,6 +272,32 @@ describe('demo-data seed gating (integration)', () => {
         .set('Authorization', `Bearer ${token}`)
         .expect(200);
       expect(settingsSchema.parse(putRes.body).preferences).toEqual(next);
+    });
+
+    it('serves a ready prep report with suggested questions', async () => {
+      const res = await request(seeded.httpServer)
+        .get(`/patients/${DEMO_PATIENT_ID}/next-meeting-report`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const report = reportSchema.parse(res.body);
+      expect(report.status).toBe('ready');
+      expect(report.questions.length).toBeGreaterThan(0);
+      expect(report.changes.length).toBeGreaterThan(0);
+    });
+
+    it('serves the seeded clinical note and replaces it', async () => {
+      const getRes = await request(seeded.httpServer)
+        .get(`/patients/${DEMO_PATIENT_ID}/notes`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(noteSchema.parse(getRes.body).body).toContain('מטופל בטיפול');
+
+      const putRes = await request(seeded.httpServer)
+        .put(`/patients/${DEMO_PATIENT_ID}/notes`)
+        .send({ body: 'הערה מעודכנת' })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(noteSchema.parse(putRes.body).body).toBe('הערה מעודכנת');
     });
   });
   // The gate (SEED_DEMO_DATA off → nothing seeded) is asserted in db.int-spec,

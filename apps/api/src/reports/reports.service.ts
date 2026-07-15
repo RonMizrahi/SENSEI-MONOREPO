@@ -120,6 +120,7 @@ export class ReportsService implements OnApplicationBootstrap {
       intro: report.intro,
       changes: report.changes,
       open_topics: report.openTopics,
+      questions: report.questions ?? [],
       source_meeting_ids: report.sourceMeetingIds,
       last_summary_excerpt: report.lastSummaryExcerpt,
       generated_at: report.generatedAt ? report.generatedAt.toISOString() : null,
