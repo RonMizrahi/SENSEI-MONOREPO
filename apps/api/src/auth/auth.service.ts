@@ -1,10 +1,15 @@
 import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { DuplicateResourceException } from '../common/exceptions/app.exception';
+import {
+  DuplicateResourceException,
+  ResourceNotFoundException,
+} from '../common/exceptions/app.exception';
 import { AUTH_TYPE_PASSWORD, ROLE_THERAPIST, TOKEN_TYPE_BEARER } from './auth.constants';
 import { PasswordChangeRequestDto } from './dto/password-change.dto';
+import { ProfileResponseDto } from './dto/profile-response.dto';
 import { RegisterRequestDto, RegisterResponseDto } from './dto/register.dto';
 import { TokenResponseDto } from './dto/token.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { User } from './entities/user.entity';
 import { JwtPayload } from './jwt-payload.interface';
 import { PasswordService } from './password.service';
@@ -36,6 +41,35 @@ export class AuthService {
     });
     if (!user) throw new DuplicateResourceException('user', 'email');
     return RegisterResponseDto.fromUser(user);
+  }
+
+  /**
+   * Loads the caller's full profile.
+   * @throws ResourceNotFoundException when the account no longer exists.
+   */
+  async getProfile(userId: string): Promise<ProfileResponseDto> {
+    const user = await this.users.findById(userId);
+    if (!user) throw new ResourceNotFoundException('user', userId);
+    return ProfileResponseDto.fromEntity(user);
+  }
+
+  /**
+   * Applies profile edits for the caller and returns the updated profile.
+   * @throws ResourceNotFoundException when the account no longer exists.
+   */
+  async updateProfile(userId: string, dto: UpdateProfileDto): Promise<ProfileResponseDto> {
+    const updated = await this.users.updateProfile(userId, {
+      fullName: dto.full_name,
+      phone: dto.phone,
+      gender: dto.gender,
+      title: dto.title,
+      licenseNumber: dto.license_number,
+      org: dto.org,
+      bio: dto.bio,
+      avatarColor: dto.avatar_color,
+    });
+    if (!updated) throw new ResourceNotFoundException('user', userId);
+    return ProfileResponseDto.fromEntity(updated);
   }
 
   /**

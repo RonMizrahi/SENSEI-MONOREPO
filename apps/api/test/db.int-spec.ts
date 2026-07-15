@@ -12,6 +12,8 @@ const MEETING_SUMMARY_INSIGHT_MIGRATION = '0005_meeting_summary_insight.sql';
 const SEED_DEMO_SESSIONS_MIGRATION = '0006_seed_demo_sessions.sql';
 const NOTIFICATIONS_MIGRATION = '0007_notifications.sql';
 const SEED_DEMO_NOTIFICATIONS_MIGRATION = '0008_seed_demo_notifications.sql';
+const USER_PROFILE_SETTINGS_MIGRATION = '0009_user_profile_settings.sql';
+const SEED_DEMO_PROFILE_MIGRATION = '0010_seed_demo_profile.sql';
 // Every versioned SQL file the boot-time runner applies, in filename order. Seed
 // migrations apply (and are tracked) in every env; their inserts are gated by
 // SEED_DEMO_DATA, so this list is identical across dev and prod.
@@ -24,6 +26,8 @@ const EXPECTED_MIGRATIONS = [
   SEED_DEMO_SESSIONS_MIGRATION,
   NOTIFICATIONS_MIGRATION,
   SEED_DEMO_NOTIFICATIONS_MIGRATION,
+  USER_PROFILE_SETTINGS_MIGRATION,
+  SEED_DEMO_PROFILE_MIGRATION,
 ];
 const EXPECTED_TABLES = [
   '_migrations',
@@ -34,6 +38,7 @@ const EXPECTED_TABLES = [
   'meeting_summaries',
   'patient_reports',
   'notifications',
+  'user_settings',
 ];
 
 // this file cannot use the factory's bundled close() for the first app (its

@@ -19,6 +19,7 @@ import { HealthModule } from './health/health.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { PatientsModule } from './patients/patients.module';
 import { ReportsModule } from './reports/reports.module';
+import { SettingsModule } from './settings/settings.module';
 import { SummariesModule } from './summaries/summaries.module';
 import { TranscriptionModule } from './transcription/transcription.module';
 import { TranscriptsModule } from './transcripts/transcripts.module';
@@ -43,6 +44,7 @@ import { TranscriptsModule } from './transcripts/transcripts.module';
     SummariesModule,
     ReportsModule,
     NotificationsModule,
+    SettingsModule,
     LoggerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env, true>) => ({

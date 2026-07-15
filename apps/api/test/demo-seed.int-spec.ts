@@ -70,6 +70,21 @@ const notificationListSchema = z.array(
     created_at: z.iso.datetime(),
   }),
 );
+const profileSchema = z.object({
+  user_id: z.uuid(),
+  email: z.string(),
+  full_name: z.string().nullable(),
+  phone: z.string().nullable(),
+  gender: z.string().nullable(),
+  title: z.string().nullable(),
+  license_number: z.string().nullable(),
+  org: z.string().nullable(),
+  bio: z.string().nullable(),
+  avatar_color: z.string().nullable(),
+  role: z.string(),
+  created_at: z.iso.datetime(),
+});
+const settingsSchema = z.object({ preferences: z.record(z.string(), z.unknown()) });
 // The seeded past sessions fall in this window (SESSION_DATES: May–Jun 2026).
 const PAST_FROM = '2026-05-01';
 const PAST_TO = '2026-06-30';
@@ -209,6 +224,46 @@ describe('demo-data seed gating (integration)', () => {
         .send({ read: true })
         .set('Authorization', `Bearer ${token}`)
         .expect(404);
+    });
+
+    it('serves the seeded profile and applies an edit', async () => {
+      const token = await loginDemo(seeded.httpServer);
+      const getRes = await request(seeded.httpServer)
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const profile = profileSchema.parse(getRes.body);
+      expect(profile).toMatchObject({
+        full_name: 'ד״ר רותם שגב',
+        title: 'פסיכולוגית קלינית',
+        license_number: '27-104882',
+        gender: 'f',
+      });
+
+      const patchRes = await request(seeded.httpServer)
+        .patch('/auth/me')
+        .send({ phone: '050-999-8888' })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(profileSchema.parse(patchRes.body).phone).toBe('050-999-8888');
+    });
+
+    it('serves the seeded preferences and replaces them', async () => {
+      const token = await loginDemo(seeded.httpServer);
+      const getRes = await request(seeded.httpServer)
+        .get('/settings')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const settings = settingsSchema.parse(getRes.body);
+      expect(settings.preferences).toHaveProperty('appearance');
+
+      const next = { appearance: { theme: 'dark' }, a11y: { textSize: 'large' } };
+      const putRes = await request(seeded.httpServer)
+        .put('/settings')
+        .send({ preferences: next })
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(settingsSchema.parse(putRes.body).preferences).toEqual(next);
     });
   });
   // The gate (SEED_DEMO_DATA off → nothing seeded) is asserted in db.int-spec,

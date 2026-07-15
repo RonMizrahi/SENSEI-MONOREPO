@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Patch, Post } from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -12,8 +12,10 @@ import type { AuthenticatedUser } from '../common/decorators/current-user.decora
 import { Public } from '../common/decorators/public.decorator';
 import { AuthService } from './auth.service';
 import { PasswordChangeRequestDto } from './dto/password-change.dto';
+import { ProfileResponseDto } from './dto/profile-response.dto';
 import { RegisterRequestDto, RegisterResponseDto } from './dto/register.dto';
 import { TokenRequestDto, TokenResponseDto } from './dto/token.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { WhoamiResponseDto } from './dto/whoami.dto';
 
 /** /auth endpoints — dispatch only; all logic lives in AuthService. */
@@ -66,6 +68,31 @@ export class AuthController {
   @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Missing/invalid token' })
   whoami(@CurrentUser() user: AuthenticatedUser): WhoamiResponseDto {
     return WhoamiResponseDto.fromPrincipal(user);
+  }
+
+  /** Returns the authenticated therapist's full editable profile. */
+  @Get('me')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get the current therapist profile' })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Profile', type: ProfileResponseDto })
+  @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Missing/invalid token' })
+  getProfile(@CurrentUser() user: AuthenticatedUser): Promise<ProfileResponseDto> {
+    return this.authService.getProfile(user.userId);
+  }
+
+  /** Applies profile edits for the authenticated therapist. */
+  @Patch('me')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update the current therapist profile' })
+  @ApiBody({ type: UpdateProfileDto })
+  @ApiResponse({ status: HttpStatus.OK, description: 'Updated profile', type: ProfileResponseDto })
+  @ApiResponse({ status: HttpStatus.BAD_REQUEST, description: 'Invalid field' })
+  @ApiResponse({ status: HttpStatus.UNAUTHORIZED, description: 'Missing/invalid token' })
+  updateProfile(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateProfileDto,
+  ): Promise<ProfileResponseDto> {
+    return this.authService.updateProfile(user.userId, dto);
   }
 
   /** Rotates the password after verifying the current one. */
