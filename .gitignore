@@ -27,3 +27,4 @@ npm-debug.log*
 
 # Runtime audio uploads (UPLOAD_DIR) — never commit
 uploads/
+.playwright-mcp/
