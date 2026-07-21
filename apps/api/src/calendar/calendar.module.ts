@@ -23,5 +23,6 @@ import { CalendarEvent } from './entities/calendar-event.entity';
       MockCalendarRepository,
     ),
   ],
+  exports: [CALENDAR_REPOSITORY],
 })
 export class CalendarModule {}

@@ -4,6 +4,7 @@ import { APP_FILTER, APP_GUARD, APP_INTERCEPTOR, APP_PIPE } from '@nestjs/core';
 import { seconds, ThrottlerModule } from '@nestjs/throttler';
 import { LoggerModule } from 'nestjs-pino';
 import { randomUUID } from 'node:crypto';
+import { AssistantModule } from './assistant/assistant.module';
 import { AudioModule } from './audio/audio.module';
 import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
@@ -47,6 +48,7 @@ import { TranscriptsModule } from './transcripts/transcripts.module';
     NotificationsModule,
     SettingsModule,
     NotesModule,
+    AssistantModule,
     LoggerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env, true>) => ({

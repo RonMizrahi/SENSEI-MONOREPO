@@ -19,6 +19,9 @@ export function configureApp(app: INestApplication): void {
     origin: allowAllOrigins ? true : corsOrigins.split(',').map((origin) => origin.trim()),
     // credentials + reflected wildcard origin is unsafe — only allow with an explicit allowlist
     credentials: !allowAllOrigins,
+    // The assistant streams an AI-SDK "UI Message Stream"; the browser transport
+    // (@ai-sdk/react useChat) only accepts the stream when it can read this header.
+    exposedHeaders: ['x-vercel-ai-ui-message-stream'],
   });
   app.enableShutdownHooks();
 }

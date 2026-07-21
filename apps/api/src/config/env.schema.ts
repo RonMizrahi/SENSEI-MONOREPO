@@ -3,6 +3,7 @@ import { z } from 'zod';
 const JWT_SECRET_MIN_LENGTH = 32;
 const DEFAULT_MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const DEFAULT_MAX_TRANSCRIPT_CHARS = 40_000;
+const DEFAULT_MAX_QUESTION_CHARS = 4_000;
 
 /** Single source of truth for environment configuration — parsed once, fail-fast on boot. */
 export const envSchema = z.object({
@@ -36,6 +37,22 @@ export const envSchema = z.object({
   ANTHROPIC_API_KEY: z.string().optional(),
   SUMMARY_MODEL: z.string().default('claude-haiku-4-5'),
   MAX_TRANSCRIPT_CHARS: z.coerce.number().int().positive().default(DEFAULT_MAX_TRANSCRIPT_CHARS),
+  // --- assistant chat ("שאל את סנסיי"; OpenAI, or MOCK_MODE mock) ---
+  ASSISTANT_ENABLED: z.stringbool().default(false),
+  OPENAI_API_KEY: z.string().optional(),
+  OPENAI_MODEL: z.string().default('gpt-4o'),
+  // The assistant's tools call back into this API; forward the caller's bearer.
+  ASSISTANT_SELF_BASE_URL: z.string().default('http://localhost:3000'),
+  // true (demo only) lets the tools reach any GET on this API, incl. PHI.
+  ASSISTANT_ALLOW_ALL_GETS: z.stringbool().default(false),
+  ASSISTANT_MAX_OUTPUT_TOKENS: z.coerce.number().int().positive().optional(),
+  ASSISTANT_MAX_QUESTION_CHARS: z.coerce.number().int().positive().default(DEFAULT_MAX_QUESTION_CHARS),
+  ASSISTANT_MAX_TOTAL_INPUT_TOKENS: z.coerce.number().int().positive().optional(),
+  // --- assistant tracing (Langfuse; disabled by default) ---
+  LANGFUSE_ENABLED: z.stringbool().default(false),
+  LANGFUSE_PUBLIC_KEY: z.string().optional(),
+  LANGFUSE_SECRET_KEY: z.string().optional(),
+  LANGFUSE_BASE_URL: z.string().optional(),
 });
 
 /** Typed shape of the validated environment — use with `ConfigService<Env, true>`. */

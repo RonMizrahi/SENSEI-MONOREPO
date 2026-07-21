@@ -20,5 +20,6 @@ import { PatientsService } from './patients.service';
       MockPatientsRepository,
     ),
   ],
+  exports: [PATIENTS_REPOSITORY],
 })
 export class PatientsModule {}
