@@ -1,4 +1,4 @@
-// Mobile prep-report, patient profile, and recording overlay — the bespoke
+// Mobile prep-report and patient profile — the bespoke
 // mobile screens rendered by MobileApp for the report / patient routes. Same
 // matchMedia mobile gating as mobileDayView.test.tsx.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -40,23 +40,15 @@ describe('mobile prep report', () => {
     expect(container.querySelector('.mob-check.is-done')).toBeTruthy();
   });
 
-  it('starts a recording from the prep report and stops it with a toast', async () => {
+  it('offers both direct recording and upload from the prep report', async () => {
     const { container } = mount({ route: 'report', patientId: 'p3' });
     await waitFor(() => expect(container.querySelector('.mob-screen')).toBeTruthy());
-    fireEvent.click([...container.querySelectorAll('button')].find((b) => b.textContent === 'התחל הקלטה') as HTMLElement);
-    await waitFor(() => expect(document.querySelector('[role="dialog"][aria-label^="הקלטת פגישה"]')).toBeTruthy());
-    // pause → resume toggles the control's accessible name (recorder pause/resume)
-    const pauseBtn = () => [...document.querySelectorAll('button')]
-      .find((b) => /השהיית הקלטה|המשך הקלטה/.test(b.getAttribute('aria-label') || '')) as HTMLElement;
-    expect(pauseBtn().getAttribute('aria-label')).toBe('השהיית הקלטה');
-    act(() => { fireEvent.click(pauseBtn()); });
-    await waitFor(() => expect(pauseBtn().getAttribute('aria-label')).toBe('המשך הקלטה'));
-    act(() => { fireEvent.click(pauseBtn()); });
-    await waitFor(() => expect(pauseBtn().getAttribute('aria-label')).toBe('השהיית הקלטה'));
-    // stop → overlay closes + processing toast
-    act(() => { fireEvent.click([...document.querySelectorAll('button')].find((b) => b.textContent === 'סיום') as HTMLElement); });
-    await waitFor(() => expect(document.querySelector('[role="dialog"][aria-label^="הקלטת פגישה"]')).toBeFalsy());
-    await waitFor(() => expect(document.body.textContent).toContain('ההקלטה נשמרה'));
+    // the footer offers both the in-browser recording CTA and the upload flow
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent === 'התחל הקלטה'), 'direct-record CTA present').toBe(true);
+    const upload = [...container.querySelectorAll('button')].find((b) => b.textContent === 'העלאת הקלטה') as HTMLElement;
+    expect(upload, 'upload CTA present').toBeTruthy();
+    fireEvent.click(upload);
+    await waitFor(() => expect(window.location.hash).toBe('#/upload'));
   });
 });
 
@@ -68,5 +60,20 @@ describe('mobile patient profile', () => {
     expect(container.textContent).toContain('הפגישה הבאה');
     expect(container.textContent).toContain('פגישות אחרונות');
     expect(container.querySelectorAll('.mob-sess-row').length).toBeGreaterThan(0);
+  });
+});
+
+describe('mobile drawer — focus restore (WCAG focus management)', () => {
+  it('closing the drawer returns focus to the menu button', async () => {
+    localStorage.setItem('sensei_session_react_v1', JSON.stringify({ __savedAt: Date.now(), view: 'app', route: 'dashboard' }));
+    render(<AppStoreProvider><App /></AppStoreProvider>);
+    await act(() => new Promise((r) => setTimeout(r, 150)));
+    const menu = document.querySelector('[aria-label="פתיחת התפריט"]') as HTMLButtonElement;
+    expect(menu).toBeTruthy();
+    fireEvent.click(menu);
+    await act(() => new Promise((r) => setTimeout(r, 100)));
+    // close via the scrim
+    fireEvent.click(document.querySelector('.nav-scrim') as HTMLElement);
+    await waitFor(() => expect(document.activeElement).toBe(menu));
   });
 });

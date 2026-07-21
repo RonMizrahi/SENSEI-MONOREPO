@@ -11,11 +11,11 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
-    /* Ported from an untyped JS prototype. Full `strict` (null/any) remains
-       deferred debt (see README, Known debt), but the independent safety checks
-       below are enabled and pass clean: unused locals/params, implicit returns,
-       explicit overrides, consistent file casing, switch fallthrough. */
-    "strict": false,
+    /* Full `strict` (null checks, implicit-any, strict function types, etc.) is
+       ON. The port originated from an untyped JS prototype; the remaining strict
+       fallout was small and has been fixed. The independent safety checks below
+       are additive on top of strict. */
+    "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noImplicitReturns": true,

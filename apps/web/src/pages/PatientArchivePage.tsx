@@ -1,68 +1,43 @@
 // Archived patients — inactive client files with restore action.
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useApp } from '../store/AppStore';
-import { avatarColors } from '../utils';
+import { avatarColors, heCount } from '../utils';
 import {
-  displayPatientEmail, formatPatientSince, loadArchivedPatientsWithFallback,
+  displayPatientEmail, formatTreatmentSpan,
   patientAvatarColor, patientInitials, restorePatient,
 } from '../services/patients';
-import { isApiConfigured } from '../services/apiClient';
+import { normHe } from '../utils/search';
+import Highlight from '../components/shared/Highlight';
 import './patients.css';
 import { CARD_SHADOW } from '../utils/styles';
 
 export default function PatientArchivePage() {
   const { S, set, navigate, toast } = useApp();
-  const [loading, setLoading] = useState(isApiConfigured());
-
-  useEffect(() => {
-    let cancelled = false;
-    if (isApiConfigured()) {
-      setLoading(true);
-      // Fallback is unused on the API path (success or catch); omit S.archivedPatients
-      // from deps so setting it after fetch does not re-trigger this effect.
-      loadArchivedPatientsWithFallback([])
-        .then(({ patients }) => {
-          if (cancelled) return;
-          set({ archivedPatients: patients });
-          setLoading(false);
-        })
-        .catch(() => {
-          if (cancelled) return;
-          setLoading(false);
-        });
-    } else {
-      setLoading(false);
-    }
-    return () => { cancelled = true; };
-  }, [S.calendarRefreshNonce, set]);
+  // Archived files are client-side state in both modes (the backend has no
+  // archive concept — docs/INTEGRATION.md), so there is nothing to fetch.
+  const loading = false;
+  const [query, setQuery] = useState('');
 
   const archived = S.archivedPatients || [];
-  const filtered = [...archived];
-  if (S.sortBy === 'name' || S.sortBy === 'relevance') {
-    filtered.sort((a, b) => a.name.localeCompare(b.name, 'he'));
-  } else if (S.sortBy === 'recent') {
-    filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  const q = normHe(query.trim());
+  const filtered = archived.filter((p: any) =>
+    !q || normHe(p.name).includes(q) || normHe(p.phone || '').includes(q) || normHe(p.email || '').includes(q),
+  );
+  if (S.sortBy === 'recent') {
+    filtered.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  } else {
+    // Default: alphabetical, so a long archive stays scannable.
+    filtered.sort((a: any, b: any) => a.name.localeCompare(b.name, 'he'));
   }
 
-  const countLabel = archived.length + ' מטופלים בארכיון';
+  const countLabel = heCount(archived.length, 'מטופל אחד בארכיון', 'מטופלים בארכיון');
 
-  const restore = async (id: string) => {
+  const restore = (id: string) => {
     const record = archived.find((p: any) => p.id === id);
     if (!record) return;
-    if (isApiConfigured()) {
-      try {
-        const restored = await restorePatient(id);
-        set({
-          archivedPatients: archived.filter((p: any) => p.id !== id),
-          patients: [restored, ...S.patients],
-        });
-        toast('התיק שוחזר לרשימת המטופלים הפעילים');
-        return;
-      } catch {
-        toast('שחזור בשרת נכשל · נשמר מקומית', 'error');
-      }
-    }
-    const restored = { ...record, archived: false };
+    // Client-side lifecycle transform in both modes — the backend has no
+    // archive state (docs/INTEGRATION.md).
+    const restored = restorePatient(record);
     set({
       archivedPatients: archived.filter((p: any) => p.id !== id),
       patients: [restored, ...S.patients],
@@ -79,7 +54,7 @@ export default function PatientArchivePage() {
       avColor: a.color,
       initials: patientInitials(p.name),
       meta: p.phone + ' · ' + displayPatientEmail(p.email),
-      since: formatPatientSince(p.created_at),
+      since: formatTreatmentSpan(p.created_at, p.archived_at),
       onOpen: () => navigate('patient', { patientId: p.id }),
       onRestore: (e: any) => { e.stopPropagation(); restore(p.id); },
     };
@@ -102,9 +77,28 @@ export default function PatientArchivePage() {
         </button>
       </div>
 
+      {!loading && archived.length > 0 && (
+        <div style={{ position: 'relative', marginBottom: 16 }}>
+          <svg viewBox="0 0 24 24" width="19" height="19" fill="var(--text-muted)" aria-hidden="true" style={{ position: 'absolute', insetInlineStart: 14, top: '50%', transform: 'translateY(-50%)' }}><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.49 4.49 0 0 1 9.5 14z" /></svg>
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="חיפוש בארכיון"
+            placeholder="חיפוש לפי שם, טלפון או דוא״ל…"
+            className="app-search"
+          />
+        </div>
+      )}
+
       <div style={{ background: 'var(--paper)', border: '1px solid var(--divider)', borderRadius: 10, boxShadow: CARD_SHADOW, overflow: 'hidden' }}>
         {loading && (
           <div style={{ padding: '52px 24px', textAlign: 'center', color: 'var(--text-muted)' }}>טוען ארכיון…</div>
+        )}
+
+        {!loading && archived.length > 0 && filtered.length === 0 && (
+          <div style={{ padding: '52px 24px', textAlign: 'center' }}>
+            <p style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 14.5 }}>לא נמצאו מטופלים בארכיון התואמים לחיפוש “{query}”.</p>
+          </div>
         )}
 
         {!loading && archived.length === 0 && (
@@ -131,14 +125,13 @@ export default function PatientArchivePage() {
               <span style={{ width: 44, height: 44, borderRadius: '50%', background: p.avBg, color: p.avColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 15, flexShrink: 0, opacity: 0.85 }}>{p.initials}</span>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 3 }}>
-                  <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{p.name}</span>
-                  <span style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-muted)', background: 'var(--surface-2)', borderRadius: 20, padding: '2px 8px' }}>בארכיון</span>
+                  <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}><Highlight text={p.name} query={query} /></span>
                 </div>
-                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{p.meta} · מאז {p.since}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{p.meta} · טיפול: {p.since}</div>
               </div>
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
-              <button onClick={p.onRestore} aria-label="שחזור מטופל" className="pat-icon-btn" style={{ height: 34, padding: '0 12px', border: '1px solid var(--primary-border)', borderRadius: 8, background: 'var(--primary-surface)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', fontSize: 12.5, fontWeight: 700 }}>
+              <button onClick={p.onRestore} aria-label="שחזור מטופל" className="pat-icon-btn tap44" style={{ height: 34, padding: '0 12px', border: '1px solid var(--primary-border)', borderRadius: 8, background: 'var(--primary-surface)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--primary)', fontSize: 12.5, fontWeight: 700 }}>
                 שחזור
               </button>
               <button onClick={(e) => { e.stopPropagation(); set({ dialog: 'deletePatientPermanent', dialogPatientId: p.id }); }} aria-label="מחיקת מטופל לצמיתות" className="pat-del-btn" style={{ width: 34, height: 34, border: '1px solid var(--divider)', borderRadius: 8, background: 'var(--paper)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

@@ -4,25 +4,10 @@ import { useApp } from '../store/AppStore';
 import { avatarColors } from '../utils';
 import { patientInitials, patientAvatarColor } from '../services/patients';
 import { scoreP, hlParts, normHe } from '../utils/search';
+import { buildPatientSessions } from '../utils/patientSessions';
 import './search.css';
-import { SESSION_DATES, sessionSummaries } from '../data/sessions';
 
 const CAL_I = 'M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z';
-
-function buildSessions(p: any, deleted: string[]): any[] {
-  const dates = SESSION_DATES;
-  const summaries = sessionSummaries(p);
-  const n = 0;
-  const out: any[] = [];
-  for (let i = 0; i < n; i++) {
-    const num = p.sessions - i;
-    const key = p.id + '#' + num;
-    if (deleted.indexOf(key) !== -1) continue;
-    out.push({ num, date: dates[i], summary: summaries[i % summaries.length] });
-  }
-  return out;
-}
-
 
 export default function SearchPage() {
   const { S, set, navigate } = useApp();
@@ -44,7 +29,7 @@ export default function SearchPage() {
   const sSesItems: any[] = [];
   if (sq) {
     S.patients.forEach((p: any) => {
-      buildSessions(p, S.deletedSessions || []).forEach((se: any) => {
+      buildPatientSessions(p, S.deletedSessions || [], { navigate, set }).forEach((se) => {
         if (_hit(se.summary)) {
           sSesItems.push({ useAvatar: false, showIcon: true, iconPath: CAL_I, iconBg: 'var(--primary-tint)', iconColor: 'var(--primary)', titleParts: hlParts('פגישה ' + se.num + ' · ' + p.name, sq), sub: se.summary, hasChip: false, onClick: () => { set({ searchQuery: '' }); navigate('summary', { patientId: p.id }); } });
         }
@@ -84,7 +69,7 @@ export default function SearchPage() {
       </div>
       <div style={{ position: 'relative', marginBottom: 18 }}>
         <svg viewBox="0 0 24 24" width="20" height="20" fill="var(--text-muted)" style={{ position: 'absolute', insetInlineStart: 15, top: '50%', transform: 'translateY(-50%)' }}><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.49 4.49 0 0 1 9.5 14z" /></svg>
-        <input value={searchQuery} onChange={onSearchInput} aria-label="חיפוש בכל המערכת" placeholder="חיפוש מטופלים ופגישות…" className="search-main-input" style={{ width: '100%', height: 52, border: '1px solid var(--divider)', background: 'var(--paper)', borderRadius: 12, padding: '0 48px', fontSize: 15.5, outline: 'none', fontFamily: 'inherit' }} />
+        <input value={searchQuery} onChange={onSearchInput} aria-label="חיפוש בכל המערכת" placeholder="חיפוש מטופלים ופגישות…" className="search-main-input" style={{ width: '100%', height: 52, border: '1px solid var(--primary-border)', background: 'var(--primary-surface)', borderRadius: 12, padding: '0 48px', fontSize: 15.5, outline: 'none', fontFamily: 'inherit' }} />
         {searchHasQuery && (
           <svg onClick={clearSearchInput} role="button" tabIndex={0} aria-label="ניקוי" viewBox="0 0 24 24" width="19" height="19" fill="var(--text-muted)" className="search-clear" style={{ position: 'absolute', insetInlineEnd: 15, top: '50%', transform: 'translateY(-50%)', cursor: 'pointer' }}><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>
         )}
@@ -144,7 +129,15 @@ export default function SearchPage() {
             <svg viewBox="0 0 24 24" width="30" height="30" fill="var(--text-muted)"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.49 4.49 0 0 1 9.5 14z" /></svg>
           </div>
           <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 5 }}>לא נמצאו תוצאות</div>
-          <div style={{ fontSize: 13.5, color: 'var(--text-muted)' }}>נסו שם מטופל אחר</div>
+          <div style={{ fontSize: 13.5, color: 'var(--text-muted)', marginBottom: 18 }}>נסו שם מטופל אחר, או הוסיפו מטופל חדש</div>
+          <button
+            type="button"
+            onClick={() => set({ dialog: 'create', form: { name: '', phone: '', email: '', address: '' }, errors: {} })}
+            className="pat-new-btn"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, height: 42, padding: '0 18px', border: 'none', borderRadius: 10, background: 'var(--primary)', color: 'var(--paper)', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}
+          >
+            <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor" aria-hidden="true"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" /></svg>מטופל חדש
+          </button>
         </div>
       )}
 

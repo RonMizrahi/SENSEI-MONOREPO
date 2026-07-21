@@ -80,11 +80,11 @@ owner file (never add broad ignores).
 - **Hardcoded-hex baseline (66):** the data-driven avatar palette + on-accent icon fills that pass
   the 3:1 graphics threshold + the onboarding-banner gradient. Frozen (non-increasing); reduce over
   time by switching to `var(--token)`.
-- **Capability/policy descriptions vs. action confirmations (copy integrity):** general product
-  descriptions that represent the demo's audit-log feature (`HelpPage` privacy FAQ, `DocumentsPage`
-  signature note — alongside the equally-represented RBAC/PII claims) are out of the copy-integrity
-  guard's scope. Only per-action confirmations (dialogs/toasts/status) must be literally true in
-  this build.
+- **Copy integrity (two tiers):** per-action confirmations (dialogs/toasts/status) must be literally
+  true — the copy-integrity guard enforces this. **Security/privacy claims** (encryption, PII
+  scrubbing, RBAC, audit logs, compliance) must never appear at all: they were removed in v1.46.1 and
+  are banned by a guard in `tests/helpHub.test.tsx` (CONTENT_GUIDE §5). Obvious demo capability framing
+  (transcription, AI summaries from seed data) stays acceptable.
 - **`buildSessions` / `nMeta` / `routeFor` / `resCatMeta` / `tagMeta`:** intentionally divergent
   per-screen implementations (see ARCHITECTURE.md), not redundant duplicates — excluded from the
   single-source guard by design.

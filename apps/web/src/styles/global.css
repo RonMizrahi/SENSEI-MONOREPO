@@ -31,9 +31,175 @@ html, body { overflow-x: hidden; }
    chrome + interactive control (or anything tagged .no-print) so a clean, professional
    letter goes to paper / PDF. On-screen appearance is unaffected. */
 @media print {
-  .app-sidebar, .appbar, .nav-toggle, .nav-scrim, .shell-fab, .demo-pill,
+  .app-sidebar, .nav-toggle, .nav-scrim, .shell-fab, .demo-pill,
   .skip-link, [role='dialog'], [role='menu'], .no-print { display: none !important; }
   html, body { background: var(--on-accent) !important; }
   #main-content { padding: 0 !important; overflow: visible !important; }
   #main-content * { box-shadow: none !important; }
+}
+
+/* Visually-hidden but screen-reader-available (e.g. polite live regions). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Touch-target expansion utility: keeps the visible control unchanged while
+   extending the TAP area toward the 44px floor (same technique as .mob-plus).
+   Overlay clicks resolve to the button. Not for <svg> (no pseudo-elements). */
+.tap44, .pat-del-btn { position: relative; }
+.tap44::after, .pat-del-btn::after { content: ''; position: absolute; inset: -6px; }
+
+/* Standardized native <select> — single source of truth for every form select
+   (patient/duration/recurrence pickers, roster filters, upload meeting date).
+   Consistent box: 44px height, 1.5px --primary-border, 10px radius, 14.5px, blue
+   --primary-surface fill, --text. A CUSTOM chevron (appearance:none + background SVG) replaces
+   the browser default so its size/offset/spacing are identical everywhere: it
+   sits 14px from the inline-end edge (physical left, this app is RTL-only), with
+   38px of inline-end padding so the value/placeholder never touches or is
+   clipped by it. The chevron colour matches --text-muted per theme (a data URI
+   can't read tokens, so light/dark are two rules). */
+.app-select {
+  height: 44px;
+  border: 1.5px solid var(--primary-border);
+  border-radius: 10px;
+  padding-block: 0;
+  padding-inline-start: 12px;
+  padding-inline-end: 38px;
+  font-size: 14.5px;
+  font-family: inherit;
+  background-color: var(--primary-surface);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24'%3E%3Cpath fill='%235F6C89' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: left 14px center;
+  color: var(--text);
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+}
+[data-theme="dark"] .app-select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24'%3E%3Cpath fill='%238496BA' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+}
+.app-select:focus { border-color: var(--primary); }
+.app-select:disabled { opacity: .55; cursor: not-allowed; }
+
+/* Standardized list-search input — SSOT for the "search a list" fields (patient
+   roster, archive, meeting-history directory). Matches .app-select's box for a
+   consistent input/select rhythm: 44px, 1.5px --primary-border, 10px radius,
+   14.5px, --primary-surface fill. The search icon is a sibling absolutely positioned at the inline-start
+   (44px start padding leaves room). */
+.app-search {
+  width: 100%;
+  height: 44px;
+  border: 1.5px solid var(--primary-border);
+  border-radius: 10px;
+  padding-block: 0;
+  padding-inline: 44px 14px;
+  font-size: 14.5px;
+  font-family: inherit;
+  background: var(--primary-surface);
+  color: var(--text);
+  outline: none;
+}
+.app-search:focus { border-color: var(--primary); }
+
+/* Unified blue field surface — every editable/selectable control shares one blue
+   design: --primary-surface fill + --primary-border edge (set on .app-select /
+   .app-search above and on the class-styled inputs here). Inline error borders
+   (--error) still win, so validation states remain distinct. */
+.shell-input, .auth-input, .set-input, .trs-search {
+  background: var(--primary-surface);
+}
+
+/* Blue field floor — any text-like control that doesn't set its own background
+   inherits the approved blue surface, so a NEW input/textarea/select is blue by
+   default without per-field styling. Zero-specificity :where() never overrides a
+   field's own class or inline background (transparent palette input, etc. still
+   win). Non-text controls (checkbox/radio/file/range/color/buttons) are excluded
+   so their native rendering is untouched. */
+:where(
+  input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=submit]):not([type=button]),
+  textarea,
+  select
+) {
+  background-color: var(--primary-surface);
+}
+
+/* Inert state completes the floor: a disabled field must NOT read as an active
+   blue field. It drops to the muted --surface-2 fill, dims, shows not-allowed, and
+   uses --text-disabled. Same type-exclusion list as the floor (so a disabled
+   checkbox keeps native rendering); kept in sync with .app-select:disabled above.
+   (Disabled text is WCAG-exempt from the 4.5:1 contrast requirement.) */
+:where(
+  input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=color]):not([type=submit]):not([type=button]),
+  textarea,
+  select
+):disabled {
+  background-color: var(--surface-2);
+  color: var(--text-disabled);
+  cursor: not-allowed;
+  opacity: .7;
+}
+
+/* Blue checkbox — single source of truth (components/shared/Checkbox.tsx). A
+   native checkbox restyled to the design system in every state, tokens only, so
+   it looks identical on desktop/tablet/mobile and in both themes. Unchecked is a
+   blue-bordered blue-tint box (not the default gray); checked/indeterminate fill
+   with --primary and a light glyph; focus shows the standard ring. */
+.ds-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
+  inline-size: 18px;
+  block-size: 18px;
+  flex-shrink: 0;
+  margin: 0;
+  border: 1.5px solid var(--primary-border);
+  border-radius: 5px;
+  background: var(--primary-surface);
+  cursor: pointer;
+  display: inline-grid;
+  place-content: center;
+  transition: background-color .15s ease, border-color .15s ease;
+}
+.ds-checkbox::after {
+  content: '';
+  inline-size: 5px;
+  block-size: 9px;
+  margin-block-start: -1px;
+  border: solid var(--on-accent);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0);
+  transition: transform .12s ease;
+}
+.ds-checkbox:checked {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.ds-checkbox:checked::after { transform: rotate(45deg) scale(1); }
+.ds-checkbox:indeterminate {
+  background: var(--primary);
+  border-color: var(--primary);
+}
+.ds-checkbox:indeterminate::after {
+  inline-size: 9px;
+  block-size: 0;
+  margin: 0;
+  border-width: 0 0 2px 0;
+  transform: rotate(0) scale(1);
+}
+.ds-checkbox:hover:not(:disabled) { border-color: var(--primary); }
+.ds-checkbox:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.ds-checkbox:disabled {
+  cursor: not-allowed;
+  opacity: .55;
+  background: var(--surface-2);
+  border-color: var(--border-input);
 }

@@ -16,8 +16,8 @@ function mount(patch: Record<string, any> = {}) {
 const settle = (ms = 130) => act(() => new Promise((r) => setTimeout(r, ms)));
 afterEach(() => { cleanup(); localStorage.clear(); });
 
-const editTrigger = () => document.querySelector('[aria-label="עריכת הערות קליניות"]') as HTMLElement;
-const notesArea = () => document.querySelector('textarea[aria-label="הערות קליניות"]') as HTMLTextAreaElement;
+const editTrigger = () => document.querySelector('[aria-label="הוספת הערה"]') as HTMLElement;
+const notesArea = () => document.querySelector('textarea[aria-label="הערות המטפל"]') as HTMLTextAreaElement;
 const banner = 'יש טיוטה שלא נשמרה מעריכה קודמת';
 const DRAFT = 'הערה קלינית שהתחלתי ואסור שתאבד באמצע עבודה';
 

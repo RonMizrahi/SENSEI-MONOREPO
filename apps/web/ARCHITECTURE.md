@@ -17,8 +17,10 @@ main.tsx → App.tsx
   components/layout/*   (AppShell, Sidebar, AppBar, overlays)   ← UI chrome
   pages/*               (one file per route, lazy)              ← screens
         ↓ may import ↓
-  store/AppStore.tsx    (global state, persistence, theme, a11y, shortcuts)
-  hooks/*               (useFocusTrap)
+  store/AppStore.tsx    (global state, persistence, theme, a11y, shortcuts;
+                         also mounts QueryClientProvider + patients bridge)
+  query/                (TanStack Query keys + hooks for live API cache)
+  hooks/*               (useFocusTrap, useWeekEvents, …)
         ↓ may import ↓
   nav/, utils/, data/   (LEAF modules — pure, import nothing from UI/state)
   styles/               (tokens.css = canonical design tokens)
@@ -27,6 +29,11 @@ main.tsx → App.tsx
 **Rule:** leaf modules (`utils/`, `data/`, `hooks/`, `nav/`) must not import from
 `pages/`, `components/`, or `store/`. Pages must not import other pages. Enforced by
 `tests/canonical.test.ts`.
+
+**Server vs UI state:** React Query owns live API cache (`patients`, calendar
+ranges) when `VITE_API_BASE_URL` is set; AppStore owns route, dialogs, drafts,
+and localStorage-backed UI. Services under `src/services/` remain the only HTTP
+boundary.
 
 ## Single Source of Truth (canonical map)
 
@@ -45,6 +52,7 @@ main.tsx → App.tsx
 | Theme-toggle icons (`SUN`/`MOON`/`MONITOR`) | `src/utils/themeIcons.ts` |
 | Share-target building (`buildWhatsAppUrl`/`buildMailtoUrl`/`sanitizeShareText`/`canShare`) | `src/utils/share.ts` |
 | `riskMeta`/`avatarColors`/`validateFile`/`getPatient`/`hg`/`hgTerm` | `src/utils/index.ts` |
+| Hebrew calendar names + time/day helpers (`HE_DAYS`/`HE_DAYS_SHORT`/`HE_MONTHS`/`HE_MONTHS_IN`/`fmtTime`/`sameDay`) | `src/utils/dates.ts` |
 | Gendered Hebrew microcopy engine (`window.HG`) | `public/hebrew-grammar.js` |
 | Global state / persistence / theme / a11y / shortcuts | `src/store/AppStore.tsx` |
 

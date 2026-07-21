@@ -13,7 +13,8 @@ function mount() {
 }
 afterEach(() => { cleanup(); localStorage.clear(); });
 
-const heading = (c: HTMLElement) => c.querySelector('h1')?.textContent?.trim() || '';
+// the calendar range/title is an h2 (the page h1 is now the personalized greeting)
+const heading = (c: HTMLElement) => c.querySelector('[aria-label^="יומן · "]')?.textContent?.trim() || '';
 
 describe('dashboard — calendar week-view home', () => {
   it('renders the week\'s events from the fixture as clickable blocks', async () => {

@@ -8,7 +8,7 @@ import ErrorBoundary from '../src/components/shared/ErrorBoundary';
 function Boom(): JSX.Element { throw new Error('boom'); }
 function Fine() { return <div>ok content</div>; }
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); sessionStorage.clear(); });
 
 describe('ErrorBoundary', () => {
   it('renders a recoverable alert instead of crashing when a child throws', () => {
@@ -35,6 +35,32 @@ describe('ErrorBoundary', () => {
     render(<ErrorBoundary resetKey="a"><Fine /></ErrorBoundary>);
     expect(screen.getByText('ok content')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('a stale-chunk error auto-reloads ONCE (bounded), then falls back to the manual card', () => {
+    // Deploy-while-active: first stale-chunk catch reloads automatically (fresh
+    // HTML → current hashes; work is flushed to localStorage on pagehide). The
+    // sessionStorage flag bounds it to a single retry — a second stale error in
+    // the same tab (broken deploy) must NOT reload again (no loop), only offer
+    // the manual recovery card.
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    function StaleChunk(): JSX.Element { throw new Error('Failed to fetch dynamically imported module: /assets/Page-OLD1.js'); }
+    const reload = vi.fn();
+    const orig = window.location;
+    Object.defineProperty(window, 'location', { value: { ...orig, reload }, writable: true });
+    try {
+      render(<ErrorBoundary resetKey="a"><StaleChunk /></ErrorBoundary>);
+      expect(reload, 'first mismatch → one automatic reload').toHaveBeenCalledTimes(1);
+      expect(sessionStorage.getItem('sensei_stale_reload_once')).toBe('1');
+      cleanup();
+      render(<ErrorBoundary resetKey="a"><StaleChunk /></ErrorBoundary>);
+      expect(reload, 'second mismatch in the same tab → NO further auto-reload').toHaveBeenCalledTimes(1);
+      expect(screen.getByText('גרסה חדשה של סנסיי זמינה'), 'manual recovery card offered instead').toBeInTheDocument();
+    } finally {
+      Object.defineProperty(window, 'location', { value: orig, writable: true });
+      err.mockRestore(); info.mockRestore();
+    }
   });
 
   it('a stale-chunk error (post-deploy) offers a reload, not a dead-end navigation', () => {

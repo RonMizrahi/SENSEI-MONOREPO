@@ -158,6 +158,9 @@
   }
   html[data-a11y-contrast="high"] *:focus-visible{outline-width:3px !important}
   /* Skip-to-content link — first tab stop, hidden until focused */
+  /* Sidebar height: dynamic viewport (mobile browser chrome, zoom, rotation),
+     with a vh fallback for engines without dvh. Only the nav body scrolls. */
+  .app-sidebar{height:100vh;height:100dvh}
   .skip-link{position:fixed;top:-64px;inset-inline-start:16px;z-index:400;background:var(--primary);color:var(--paper);padding:11px 20px;border-radius:0 0 12px 12px;font-weight:700;font-size:14px;text-decoration:none;box-shadow:0 8px 24px rgba(16,40,80,.3);transition:top .18s cubic-bezier(.4,0,.2,1)}
   .skip-link:focus,.skip-link:focus-visible{top:0;outline:3px solid #fff;outline-offset:-4px}
   /* ---- responsive shell: sidebar becomes an off-canvas drawer on narrow viewports ---- */
@@ -169,28 +172,10 @@
        invisible off-screen controls and a screen reader announces the whole hidden menu
        (WCAG 2.4.3). The `visibility 0s linear .26s` delay keeps it visible through the
        slide-out animation, then hides it; opening makes it visible immediately. */
-    .app-sidebar{position:fixed !important;top:0;bottom:0;right:0;height:100vh !important;z-index:200;transform:translateX(105%);visibility:hidden;transition:transform .26s cubic-bezier(.4,0,.2,1),visibility 0s linear .26s;box-shadow:-10px 0 40px rgba(8,20,50,.3)}
+    .app-sidebar{position:fixed !important;top:0;bottom:0;right:0;height:100vh !important;height:100dvh !important;width:min(256px,86vw) !important;z-index:200;transform:translateX(105%);visibility:hidden;transition:transform .26s cubic-bezier(.4,0,.2,1),visibility 0s linear .26s;box-shadow:-10px 0 40px rgba(8,20,50,.3)}
     .app-sidebar.open{transform:translateX(0);visibility:visible;transition:transform .26s cubic-bezier(.4,0,.2,1),visibility 0s}
     .nav-toggle{display:flex !important}
     .nav-scrim{display:block}
-    .appbar-cta .cta-label{display:none}
-    .demo-pill-label{display:none}
-    .demo-pill{padding:0 6px !important}
-    .appbar-cta{padding:0 12px !important}
-    .appbar{padding:0 16px !important;gap:10px !important}
-  }
-  @media (max-width:560px){
-    /* On phones the appbar is tight. The desktop flex:1 spacer is pure
-       whitespace that competes with the search for leftover space, and the
-       search's 190px min-width pushed the notifications + account buttons off
-       the trailing edge (clipped, unreachable ≤~400px). Collapse the spacer and
-       drop the search min so every control stays on-screen and the search stays
-       usable. */
-    .appbar-spacer{display:none !important}
-    /* App-bar dropdowns (notifications) anchor to their small, off-centre
-       triggers; on phones, pin them to the viewport with symmetric insets. */
-    .appbar-popover-panel{position:fixed !important;left:16px !important;right:16px !important;top:60px !important;min-width:0 !important;max-width:none !important;width:auto !important}
-    .appbar-hide-sm{display:none !important}
   }
   /* ---- responsive content grids: media-query overrides only, desktop keeps its inline layout ---- */
   @media (max-width:1024px){

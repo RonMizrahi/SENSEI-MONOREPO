@@ -88,4 +88,35 @@ describe('command palette — filter, select & navigate', () => {
     fireEvent.keyDown(window, { key: 'Escape' });
     await waitFor(() => expect(palette()).toBeFalsy());
   });
+
+  it('offers a full-search escalation that reaches the search screen (reconnects an orphaned route)', async () => {
+    // The full search screen (route "search") has no sidebar entry by design; the
+    // palette's "חיפוש מלא" row is its ONLY in-app entry point. A regression here
+    // would silently orphan that screen again.
+    await openPalette();
+    fireEvent.input(paletteInput(), { target: { value: 'סימבה' } });
+    const esc = await waitFor(() => {
+      const el = [...document.querySelectorAll('[role="option"]')].find((o) => o.textContent?.includes('חיפוש מלא')) as HTMLElement;
+      expect(el, 'a full-search escalation row is offered when there is a query').toBeTruthy();
+      return el;
+    });
+    fireEvent.click(esc);
+    await waitFor(() => expect(palette()).toBeFalsy());
+    // lands on the full search screen with the query carried over + session matches
+    await waitFor(() => expect(window.location.hash).toBe('#/search'));
+    await waitFor(() => expect(document.querySelector('#main-content h1')?.textContent).toContain('תוצאות חיפוש'));
+    expect((document.querySelector('.search-main-input') as HTMLInputElement)?.value).toBe('סימבה');
+  });
+
+  it('the escalation is keyboard-reachable (last option) and Enter activates it', async () => {
+    await openPalette();
+    // a query with no patient/route match → the escalation is the only option (index 0)
+    fireEvent.input(paletteInput(), { target: { value: 'זזזזז' } });
+    await waitFor(() => {
+      const opt0 = document.querySelector('#cmdopt-0');
+      expect(opt0?.textContent).toContain('חיפוש מלא');
+    });
+    fireEvent.keyDown(paletteInput(), { key: 'Enter' });
+    await waitFor(() => expect(window.location.hash).toBe('#/search'));
+  });
 });

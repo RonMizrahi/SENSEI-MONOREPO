@@ -20,14 +20,17 @@ const PATIENTS = [
 const dialog = () => document.querySelector('[role="dialog"][aria-modal="true"]') as HTMLElement;
 const nameField = () => document.querySelector('[data-field="name"]') as HTMLInputElement;
 const list = () => document.querySelector('#main-content') as HTMLElement;
-const firstEditBtn = () => document.querySelector('[aria-label="עריכת מטופל"]') as HTMLElement;
+const editBtnFor = (name: string) => {
+  const row = [...document.querySelectorAll('.pat-row')].find((r) => r.textContent?.includes(name));
+  return row?.querySelector('[aria-label="עריכת מטופל"]') as HTMLElement;
+};
 const saveBtn = () => [...document.querySelectorAll('button')].find((b) => b.textContent?.includes('שמירת שינויים')) as HTMLElement;
 
 async function openEditFirst() {
   mount({ view: 'app', route: 'patients', patients: PATIENTS });
   await settle();
-  await waitFor(() => expect(firstEditBtn()).toBeTruthy());
-  fireEvent.click(firstEditBtn());
+  await waitFor(() => expect(editBtnFor('דנה לוי')).toBeTruthy());
+  fireEvent.click(editBtnFor('דנה לוי'));
   await waitFor(() => expect(dialog()).toBeTruthy());
   return dialog();
 }
@@ -39,7 +42,7 @@ describe('edit patient — prefilled dialog & rename', () => {
     expect(saveBtn()).toBeTruthy();
     const val = nameField().value;
     expect(val).toBeTruthy();
-    expect(PATIENTS.map((p) => p.name)).toContain(val);
+    expect(val).toBe('דנה לוי');
   });
 
   it('renaming and saving closes the dialog and shows the new name in the roster', async () => {

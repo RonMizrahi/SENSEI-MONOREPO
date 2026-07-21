@@ -9,6 +9,7 @@ import * as auth from '../../services/mockAuth';
 import { ensureDemoApiAuth, DEMO_API_EMAIL, DEMO_API_NAME } from '../../services/apiAuth';
 import { isApiConfigured } from '../../services/apiClient';
 import { EMAIL_RE } from '../../utils';
+import Checkbox from '../../components/shared/Checkbox';
 import './auth.css';
 
 // Shared password-visibility icons (identical in login + signup blocks of the source).
@@ -147,7 +148,10 @@ export default function AuthScreens() {
       return;
     }
     login({ name: DEMO_API_NAME, email: DEMO_API_EMAIL });
-    toast('נכנסתם למצב הדגמה · הנתונים לדוגמה בלבד', 'info');
+    toast(
+      isApiConfigured() ? 'נכנסתם למצב הדגמה · הנתונים מהשרת' : 'נכנסתם למצב הדגמה · הנתונים לדוגמה בלבד',
+      'info',
+    );
   };
   const goSignup = () => set({ authScreen: 'signup', loginError: '', signupError: '' });
   const goLogin = () => set({ authScreen: 'login', forgotSent: false, resetStep: 'request', forgotError: '', resetError: '', loginError: '', loginLoading: false });
@@ -189,17 +193,17 @@ export default function AuthScreens() {
               <p style={{ margin: '0 0 20px', color: 'var(--text-secondary)', fontSize: 14.5 }}>ניהול שקט למטפלים · מבוסס AI</p>
               <ErrorAlert msg={S.loginError} />
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>דוא״ל</label>
-              <input className="auth-input" value={S.loginEmail} onInput={onLoginEmail} onKeyDown={onLoginKey} aria-label="דוא״ל" aria-invalid={loginHasError} autoComplete="email" autoFocus dir="ltr" placeholder="name@clinic.co.il" style={{ width: '100%', height: 46, border: '1.5px solid var(--border-input)', borderRadius: 10, padding: '0 14px', fontSize: 15, outline: 'none', marginBottom: 16, textAlign: 'start' }} />
+              <input className="auth-input" value={S.loginEmail} onInput={onLoginEmail} onKeyDown={onLoginKey} aria-label="דוא״ל" aria-invalid={loginHasError} autoComplete="email" autoFocus dir="ltr" placeholder="name@clinic.co.il" style={{ width: '100%', height: 46, border: '1.5px solid var(--primary-border)', borderRadius: 10, padding: '0 14px', fontSize: 15, outline: 'none', marginBottom: 16, textAlign: 'start' }} />
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>סיסמה</label>
               <div style={{ position: 'relative', marginBottom: 10 }}>
-                <input className="auth-input" value={S.loginPass} onInput={onLoginPass} onKeyDown={onLoginKey} type={loginPassType} aria-label="סיסמה" aria-invalid={loginHasError} autoComplete="current-password" dir="ltr" placeholder="••••••••" style={{ width: '100%', height: 46, border: '1.5px solid var(--border-input)', borderRadius: 10, padding: '0 44px 0 14px', fontSize: 15, outline: 'none', textAlign: 'start' }} />
+                <input className="auth-input" value={S.loginPass} onInput={onLoginPass} onKeyDown={onLoginKey} type={loginPassType} aria-label="סיסמה" aria-invalid={loginHasError} autoComplete="current-password" dir="ltr" placeholder="••••••••" style={{ width: '100%', height: 46, border: '1.5px solid var(--primary-border)', borderRadius: 10, padding: '0 44px 0 14px', fontSize: 15, outline: 'none', textAlign: 'start' }} />
                 <button type="button" className="auth-eye" onClick={toggleLoginPass} aria-label={loginPassToggleLabel} title={loginPassToggleLabel} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }}>
                   {S.loginShowPass && EyeOffIcon}
                   {!S.loginShowPass && EyeIcon}
                 </button>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 22 }}>
-                <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13.5, color: 'var(--text-2)', cursor: 'pointer' }}><input type="checkbox" checked={!!S.loginRemember} onChange={(e: any) => set({ loginRemember: e.target.checked })} style={{ width: 16, height: 16, accentColor: 'var(--primary)' }} />זכרו אותי</label>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13.5, color: 'var(--text-2)', cursor: 'pointer' }}><Checkbox checked={!!S.loginRemember} onChange={(e: any) => set({ loginRemember: e.target.checked })} />זכרו אותי</label>
                 <a onClick={goForgot} style={{ fontSize: 13.5, color: 'var(--primary)', fontWeight: 600, cursor: 'pointer' }}>שכחתם סיסמה?</a>
               </div>
               <button className="auth-login-btn" onClick={doLogin} disabled={S.loginLoading} aria-busy={S.loginLoading} style={{ width: '100%', height: 48, border: 'none', borderRadius: 10, background: 'var(--primary)', color: 'var(--paper)', fontSize: 16, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(31,99,214,.32)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}>
@@ -229,12 +233,12 @@ export default function AuthScreens() {
               <p style={{ margin: '0 0 22px', color: 'var(--text-secondary)', fontSize: 14.5 }}>צרו חשבון חדש בכמה שניות</p>
               <ErrorAlert msg={S.signupError} />
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>שם מלא</label>
-              <input className="auth-input" value={S.signupName} onInput={(e: any) => set({ signupName: e.target.value, signupError: '' })} aria-label="שם מלא" autoComplete="name" placeholder="ד״ר רותם שגב" style={{ width: '100%', height: 44, border: '1.5px solid var(--border-input)', borderRadius: 10, padding: '0 14px', fontSize: 15, outline: 'none', marginBottom: 14 }} />
+              <input className="auth-input" value={S.signupName} onInput={(e: any) => set({ signupName: e.target.value, signupError: '' })} aria-label="שם מלא" autoComplete="name" placeholder="ד״ר רותם שגב" style={{ width: '100%', height: 44, border: '1.5px solid var(--primary-border)', borderRadius: 10, padding: '0 14px', fontSize: 15, outline: 'none', marginBottom: 14 }} />
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>דוא״ל</label>
-              <input className="auth-input" value={S.signupEmail} onInput={(e: any) => set({ signupEmail: e.target.value, signupError: '' })} aria-label="דוא״ל" autoComplete="email" dir="ltr" placeholder="name@clinic.co.il" style={{ width: '100%', height: 44, border: '1.5px solid var(--border-input)', borderRadius: 10, padding: '0 14px', fontSize: 15, outline: 'none', marginBottom: 14, textAlign: 'start' }} />
+              <input className="auth-input" value={S.signupEmail} onInput={(e: any) => set({ signupEmail: e.target.value, signupError: '' })} aria-label="דוא״ל" autoComplete="email" dir="ltr" placeholder="name@clinic.co.il" style={{ width: '100%', height: 44, border: '1.5px solid var(--primary-border)', borderRadius: 10, padding: '0 14px', fontSize: 15, outline: 'none', marginBottom: 14, textAlign: 'start' }} />
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>סיסמה</label>
               <div style={{ position: 'relative', marginBottom: 8 }}>
-                <input className="auth-input" value={S.signupPass} onInput={(e: any) => set({ signupPass: e.target.value, signupError: '' })} aria-label="סיסמה" type={signupPassType} autoComplete="new-password" dir="ltr" placeholder="לפחות 8 תווים" style={{ width: '100%', height: 44, border: '1.5px solid var(--border-input)', borderRadius: 10, padding: '0 44px 0 14px', fontSize: 15, outline: 'none', textAlign: 'start' }} />
+                <input className="auth-input" value={S.signupPass} onInput={(e: any) => set({ signupPass: e.target.value, signupError: '' })} aria-label="סיסמה" type={signupPassType} autoComplete="new-password" dir="ltr" placeholder="לפחות 8 תווים" style={{ width: '100%', height: 44, border: '1.5px solid var(--primary-border)', borderRadius: 10, padding: '0 44px 0 14px', fontSize: 15, outline: 'none', textAlign: 'start' }} />
                 <button type="button" className="auth-eye" onClick={toggleSignupPass} aria-label={signupPassToggleLabel} title={signupPassToggleLabel} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }}>
                   {S.signupShowPass && EyeOffIcon}
                   {!S.signupShowPass && EyeIcon}
@@ -252,15 +256,15 @@ export default function AuthScreens() {
               </div>
               <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>אימות סיסמה</label>
               <div style={{ position: 'relative', marginBottom: 16 }}>
-                <input className="auth-input" value={S.signupConfirm} onInput={(e: any) => set({ signupConfirm: e.target.value, signupError: '' })} aria-label="אימות סיסמה" type={signupConfirmType} autoComplete="new-password" dir="ltr" placeholder="הזינו את הסיסמה שוב" style={{ width: '100%', height: 44, border: '1.5px solid var(--border-input)', borderRadius: 10, padding: '0 44px 0 14px', fontSize: 15, outline: 'none', textAlign: 'start' }} />
+                <input className="auth-input" value={S.signupConfirm} onInput={(e: any) => set({ signupConfirm: e.target.value, signupError: '' })} aria-label="אימות סיסמה" type={signupConfirmType} autoComplete="new-password" dir="ltr" placeholder="הזינו את הסיסמה שוב" style={{ width: '100%', height: 44, border: '1.5px solid var(--primary-border)', borderRadius: 10, padding: '0 44px 0 14px', fontSize: 15, outline: 'none', textAlign: 'start' }} />
                 <button type="button" className="auth-eye" onClick={() => set((s: any) => ({ signupShowConfirm: !s.signupShowConfirm }))} aria-label={signupConfirmToggleLabel} title={signupConfirmToggleLabel} style={{ position: 'absolute', right: 6, top: '50%', transform: 'translateY(-50%)', width: 34, height: 34, border: 'none', background: 'transparent', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }}>
                   {S.signupShowConfirm && EyeOffIcon}
                   {!S.signupShowConfirm && EyeIcon}
                 </button>
               </div>
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 13, color: 'var(--text-2)', cursor: 'pointer', marginBottom: 20, lineHeight: 1.5 }}>
-                <input type="checkbox" checked={!!S.signupTerms} onChange={(e: any) => set({ signupTerms: e.target.checked, signupError: '' })} style={{ width: 16, height: 16, accentColor: 'var(--primary)', marginTop: 2, flexShrink: 0 }} />
-                <span>קראתי ואני מאשר/ת את תנאי השימוש ומדיניות הפרטיות</span>
+                <Checkbox checked={!!S.signupTerms} onChange={(e: any) => set({ signupTerms: e.target.checked, signupError: '' })} style={{ marginTop: 2 }} />
+                <span>קראתי את תנאי השימוש ומדיניות הפרטיות והם מקובלים עליי</span>
               </label>
               <button className="auth-signup-btn" onClick={doSignup} disabled={S.signupLoading} aria-busy={S.signupLoading} style={{ width: '100%', height: 48, border: 'none', borderRadius: 10, background: 'var(--primary)', color: 'var(--paper)', fontSize: 16, fontWeight: 700, cursor: 'pointer', boxShadow: '0 4px 12px rgba(31,99,214,.32)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}>
                 {S.signupLoading && (<><span aria-hidden="true" style={{ width: 18, height: 18, border: '2.5px solid rgba(255,255,255,.4)', borderTopColor: 'currentColor', borderRadius: '50%', display: 'inline-block', animation: 'spin .7s linear infinite' }}></span><span>יוצרים חשבון…</span></>)}
@@ -286,9 +290,9 @@ export default function AuthScreens() {
                   <p style={{ margin: '0 0 22px', color: 'var(--text-secondary)', fontSize: 14.5, lineHeight: 1.6 }}>בחרו סיסמה חדשה לחשבון <bdi dir="ltr">{(S.forgotEmail || '').trim()}</bdi>.</p>
                   <ErrorAlert msg={S.resetError} />
                   <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>סיסמה חדשה</label>
-                  <input className="auth-input" value={S.resetPass} onInput={(e: any) => set({ resetPass: e.target.value, resetError: '' })} aria-label="סיסמה חדשה" type="password" autoComplete="new-password" dir="ltr" placeholder="לפחות 8 תווים" style={{ width: '100%', height: 46, border: '1.5px solid var(--border-input)', borderRadius: 10, padding: '0 14px', fontSize: 15, outline: 'none', marginBottom: 14, textAlign: 'start' }} />
+                  <input className="auth-input" value={S.resetPass} onInput={(e: any) => set({ resetPass: e.target.value, resetError: '' })} aria-label="סיסמה חדשה" type="password" autoComplete="new-password" dir="ltr" placeholder="לפחות 8 תווים" style={{ width: '100%', height: 46, border: '1.5px solid var(--primary-border)', borderRadius: 10, padding: '0 14px', fontSize: 15, outline: 'none', marginBottom: 14, textAlign: 'start' }} />
                   <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>אימות סיסמה חדשה</label>
-                  <input className="auth-input" value={S.resetConfirm} onInput={(e: any) => set({ resetConfirm: e.target.value, resetError: '' })} aria-label="אימות סיסמה חדשה" type="password" autoComplete="new-password" dir="ltr" placeholder="הזינו את הסיסמה שוב" style={{ width: '100%', height: 46, border: '1.5px solid var(--border-input)', borderRadius: 10, padding: '0 14px', fontSize: 15, outline: 'none', marginBottom: 20, textAlign: 'start' }} />
+                  <input className="auth-input" value={S.resetConfirm} onInput={(e: any) => set({ resetConfirm: e.target.value, resetError: '' })} aria-label="אימות סיסמה חדשה" type="password" autoComplete="new-password" dir="ltr" placeholder="הזינו את הסיסמה שוב" style={{ width: '100%', height: 46, border: '1.5px solid var(--primary-border)', borderRadius: 10, padding: '0 14px', fontSize: 15, outline: 'none', marginBottom: 20, textAlign: 'start' }} />
                   <button onClick={doReset} style={{ width: '100%', height: 48, border: 'none', borderRadius: 10, background: 'var(--primary)', color: 'var(--paper)', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>שמירת הסיסמה החדשה</button>
                   <p style={{ textAlign: 'center', margin: '20px 0 0', fontSize: 14 }}><a onClick={goLogin} style={{ color: 'var(--primary)', fontWeight: 700, cursor: 'pointer' }}>חזרה לכניסה</a></p>
                 </div>
@@ -309,7 +313,7 @@ export default function AuthScreens() {
                   <p style={{ margin: '0 0 22px', color: 'var(--text-secondary)', fontSize: 14.5, lineHeight: 1.6 }}>הזינו את כתובת הדוא״ל ונשלח אליכם קישור לאיפוס.</p>
                   <ErrorAlert msg={S.forgotError} />
                   <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>דוא״ל</label>
-                  <input className="auth-input" value={S.forgotEmail} onInput={(e: any) => set({ forgotEmail: e.target.value, forgotError: '' })} onKeyDown={(e: any) => { if (e.key === 'Enter') { e.preventDefault(); doForgot(); } }} aria-label="דוא״ל" autoComplete="email" dir="ltr" placeholder="name@clinic.co.il" style={{ width: '100%', height: 46, border: '1.5px solid var(--border-input)', borderRadius: 10, padding: '0 14px', fontSize: 15, outline: 'none', marginBottom: 20, textAlign: 'start' }} />
+                  <input className="auth-input" value={S.forgotEmail} onInput={(e: any) => set({ forgotEmail: e.target.value, forgotError: '' })} onKeyDown={(e: any) => { if (e.key === 'Enter') { e.preventDefault(); doForgot(); } }} aria-label="דוא״ל" autoComplete="email" dir="ltr" placeholder="name@clinic.co.il" style={{ width: '100%', height: 46, border: '1.5px solid var(--primary-border)', borderRadius: 10, padding: '0 14px', fontSize: 15, outline: 'none', marginBottom: 20, textAlign: 'start' }} />
                   <button onClick={doForgot} style={{ width: '100%', height: 48, border: 'none', borderRadius: 10, background: 'var(--primary)', color: 'var(--paper)', fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>שליחת קישור</button>
                   <p style={{ textAlign: 'center', margin: '20px 0 0', fontSize: 14 }}><a onClick={goLogin} style={{ color: 'var(--primary)', fontWeight: 700, cursor: 'pointer' }}>חזרה לכניסה</a></p>
                 </div>
@@ -344,7 +348,7 @@ export default function AuthScreens() {
           </div>
           )}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 18, color: 'var(--text-muted)' }}><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style={{ flexShrink: 0 }}><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg><span style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.5, textAlign: 'center' }}>מוצפן מקצה לקצה · תואם תקני אבטחת מידע רפואי</span></div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 18, color: 'var(--text-muted)' }}><svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" style={{ flexShrink: 0 }}><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg><span style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.5, textAlign: 'center' }}>גרסת הדגמה · הנתונים נשמרים מקומית במכשיר שלכם בלבד</span></div>
       </div>
     </div>
   );

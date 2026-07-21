@@ -9,8 +9,6 @@ export interface MeetingSummary {
   text?: string | null
   model?: string | null
   error?: string | null
-  /** Short per-session clinical insight shown on the session-detail screen. */
-  insight?: string | null
 }
 
 const POLL_MS = 2000;
@@ -18,17 +16,6 @@ const MAX_WAIT_MS = 10 * 60 * 1000;
 
 function pathFor(meetingId: string): string {
   return '/meetings/' + encodeURIComponent(meetingId) + '/summary';
-}
-
-export async function requestMeetingSummary(
-  meetingId: string,
-  signal?: AbortSignal,
-): Promise<MeetingSummary> {
-  return apiRequest<MeetingSummary>(pathFor(meetingId), {
-    method: 'POST',
-    signal,
-    timeoutMs: 30000,
-  });
 }
 
 export async function fetchMeetingSummary(
@@ -77,8 +64,10 @@ async function pollUntilSettled(
 }
 
 /**
- * Prefer existing summary (GET). POST when missing or failed so therapists can
- * retry after Ollama / model issues without re-uploading audio.
+ * Poll GET /meetings/{id}/summary until it settles. The backend contract is
+ * read-only: the summary row is created by the audio-upload pipeline and there
+ * is no POST/regenerate route, so 404 means "no summary exists for this
+ * meeting" (surfaced as a coded, user-readable failure — not retried blindly).
  */
 export async function pollMeetingSummary(
   meetingId: string,
@@ -88,36 +77,35 @@ export async function pollMeetingSummary(
     throw Object.assign(new Error('API not configured'), { code: 'NO_API' });
   }
 
-  let summary: MeetingSummary | null = null;
+  let summary: MeetingSummary;
   try {
     summary = await fetchMeetingSummary(meetingId, opts.signal);
   } catch (e: any) {
-    if (e?.status !== 404) throw e;
-  }
-
-  if (!summary || summary.status === 'failed') {
-    summary = await requestMeetingSummary(meetingId, opts.signal);
+    if (e?.status === 404) {
+      throw Object.assign(
+        new Error('אין עדיין סיכום לפגישה זו · העלו הקלטה כדי ליצור אחד'),
+        { code: 'NOT_FOUND', status: 404 },
+      );
+    }
+    throw e;
   }
 
   return pollUntilSettled(meetingId, summary, opts);
 }
 
-/** Pull bullet lines under a ## heading from a Hebrew markdown summary. */
-export function bulletsUnderHeading(text: string, heading: string): string[] {
-  const lines = text.split(/\r?\n/);
-  const items: string[] = [];
-  let inSection = false;
-  for (const raw of lines) {
-    const line = raw.trim();
-    if (line.startsWith('## ')) {
-      inSection = line.replace(/^##\s+/, '').trim() === heading.trim()
-        || line.includes(heading.trim());
-      continue;
-    }
-    if (!inSection) continue;
-    if (line.startsWith('- ') || line.startsWith('* ') || line.startsWith('• ')) {
-      items.push(line.slice(2).trim());
-    }
+export async function deleteMeetingSummary(
+  meetingId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  if (!isApiConfigured() || !meetingId) return;
+  try {
+    await apiRequest<void>(pathFor(meetingId), {
+      method: 'DELETE',
+      signal,
+      timeoutMs: 30000,
+    });
+  } catch (e: any) {
+    if (e?.status === 404) return;
+    throw e;
   }
-  return items.filter(Boolean);
 }

@@ -3,13 +3,17 @@ import { useRef, useEffect, useState, useMemo } from 'react';
 import { CARD_SHADOW } from '../utils/styles';
 import { useApp } from '../store/AppStore';
 import { getPatient, avatarColors } from '../utils';
+import { fmtDate, fmtTime } from '../utils/dates';
 import { patientInitials, patientAvatarColor } from '../services/patients';
 import { sessionSummaryText } from '../data/sessionDetail';
+import { getMockMeetingReport } from '../data/mockMeetingReports';
+import AiDisclaimer from '../components/shared/AiDisclaimer';
 import { isApiConfigured } from '../services/apiClient';
 import {
   localApptsToUiEvents,
   isUpcomingEvent,
   loadPatientUpcomingEvents,
+  dbEventApiId,
 } from '../services/calendar';
 import { formatMeetingWhen } from '../components/patient/UpcomingMeetingList';
 import {
@@ -21,40 +25,38 @@ import {
 import { reportIntro as mockIntro, REPORT_CHANGES as MOCK_CHANGES, REPORT_OPEN as MOCK_OPEN, REPORT_QUESTIONS as MOCK_QUESTIONS } from '../data/reportContent';
 import './report.css';
 
-function formatNextDateChip(start: Date | null): string {
-  if (!start) return 'לא נקבעה';
-  const dd = String(start.getDate()).padStart(2, '0');
-  const mm = String(start.getMonth() + 1).padStart(2, '0');
-  const yyyy = start.getFullYear();
-  return dd + '.' + mm + '.' + yyyy;
+function formatIsoDateChip(iso: string): string {
+  const [yyyy, mm, dd] = iso.split('-');
+  if (!yyyy || !mm || !dd) return iso;
+  return dd + '/' + mm + '/' + yyyy.slice(-2);
 }
 
 function formatGeneratedAt(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(+d)) return '';
-  const dd = String(d.getDate()).padStart(2, '0');
-  const mm = String(d.getMonth() + 1).padStart(2, '0');
-  const yyyy = d.getFullYear();
-  const hh = String(d.getHours()).padStart(2, '0');
-  const min = String(d.getMinutes()).padStart(2, '0');
-  return dd + '.' + mm + '.' + yyyy + ' ' + hh + ':' + min;
+  return fmtDate(d) + ' ' + fmtTime(d);
 }
 
 export default function ReportPage() {
   const { S, set, navigate, toast } = useApp();
   const bTimer = useRef<any>(null);
   const [apiReport, setApiReport] = useState<NextMeetingReport | null>(null);
-  const [apiLoading, setApiLoading] = useState(false);
+  // Start in the loading state when the API is configured so the first paint is the
+  // skeleton, not a one-frame flash of the demo body before the live fetch begins.
+  const [apiLoading, setApiLoading] = useState(() => isApiConfigured());
   const [apiError, setApiError] = useState('');
   const [regenerating, setRegenerating] = useState(false);
   const [nextMeetingStart, setNextMeetingStart] = useState<Date | null>(null);
+  const [nextMeetingId, setNextMeetingId] = useState<string | null>(null);
+  const reportMeetingId = (S.reportMeetingId as string | null | undefined) || nextMeetingId || undefined;
 
   useEffect(() => () => { if (bTimer.current) clearInterval(bTimer.current); }, []);
 
   const cp = getPatient(S.patients, S.patientId, S.archivedPatients || []);
   const cpa = avatarColors(patientAvatarColor(cp.id));
   const useApi = isApiConfigured();
+  const mockReport = !useApi ? getMockMeetingReport(cp.id) : null;
 
   // Resolve next meeting date (API calendar + local appts when wired).
   useEffect(() => {
@@ -65,7 +67,9 @@ export default function ReportPage() {
       const events = localApptsToUiEvents(S.scheduledAppts || [], cp.id, cp.name)
         .filter((e) => isUpcomingEvent(e, now))
         .sort((a, b) => +a.start - +b.start);
-      return events[0]?.start ? new Date(events[0].start) : null;
+      const next = events[0];
+      setNextMeetingId(next?.id ? dbEventApiId(next.id) : null);
+      return next?.start ? new Date(next.start) : null;
     };
 
     if (!useApi) {
@@ -82,7 +86,9 @@ export default function ReportPage() {
     })
       .then((events) => {
         if (cancelled) return;
-        setNextMeetingStart(events[0]?.start ? new Date(events[0].start) : fromLocal());
+        const next = events[0];
+        setNextMeetingId(next?.id ? dbEventApiId(next.id) : null);
+        setNextMeetingStart(next?.start ? new Date(next.start) : fromLocal());
       })
       .catch(() => {
         if (!cancelled) setNextMeetingStart(fromLocal());
@@ -109,6 +115,7 @@ export default function ReportPage() {
     pollNextMeetingReport(cp.id, {
       signal: ac.signal,
       onUpdate: (r) => setApiReport(r),
+      meetingId: reportMeetingId,
     })
       .then((r) => {
         setApiReport(r);
@@ -118,6 +125,8 @@ export default function ReportPage() {
       })
       .catch((e: any) => {
         if (e?.name === 'AbortError' || ac.signal.aborted) return;
+        // Route absent on the deployed backend — quiet fallback to the local report.
+        if (e?.code === 'NOT_AVAILABLE') return;
         setApiError(
           e?.details?.detail
           || e?.message
@@ -128,7 +137,7 @@ export default function ReportPage() {
         if (!ac.signal.aborted) setApiLoading(false);
       });
     return () => ac.abort();
-  }, [useApi, cp.id]);
+  }, [useApi, cp.id, reportMeetingId]);
 
   const goPatientFromSub = () => navigate('patient', { patientId: S.patientId });
   const goMeetingHistoryFromReport = () => navigate('meetingHistory', { patientId: S.patientId });
@@ -138,7 +147,7 @@ export default function ReportPage() {
     if (!useApi || !cp.id || regenerating) return;
     setRegenerating(true);
     setApiError('');
-    regenerateNextMeetingReport(cp.id)
+    regenerateNextMeetingReport(cp.id, { meetingId: reportMeetingId })
       .then((r) => {
         setApiReport(r);
         if (r.status === 'failed') {
@@ -149,6 +158,11 @@ export default function ReportPage() {
         }
       })
       .catch((e: any) => {
+        if (e?.code === 'NOT_AVAILABLE') {
+          // Route absent on the deployed backend — the local report stays current.
+          toast('רענון מהשרת אינו זמין עדיין · מוצג הדוח המקומי');
+          return;
+        }
         setApiError(
           (typeof e?.details?.detail === 'string' && e.details.detail)
           || e?.message
@@ -169,41 +183,46 @@ export default function ReportPage() {
 
   const reportIntro = useMemo(() => {
     if (useApi && apiReport?.status === 'ready') return apiReport.intro || '';
+    if (mockReport) return mockReport.intro;
     return mockIntro(cp.name);
-  }, [useApi, apiReport, cp.name]);
+  }, [useApi, apiReport, mockReport, cp.name]);
   const reportChanges = useMemo(() => {
     if (useApi && apiReport?.status === 'ready') return apiReport.changes || [];
+    if (mockReport) return mockReport.changes;
     return MOCK_CHANGES;
-  }, [useApi, apiReport]);
+  }, [useApi, apiReport, mockReport]);
   const reportOpen = useMemo(() => {
     if (useApi && apiReport?.status === 'ready') return apiReport.open_topics || [];
+    if (mockReport) return mockReport.open_topics;
     return MOCK_OPEN;
-  }, [useApi, apiReport]);
+  }, [useApi, apiReport, mockReport]);
 
   const lastSummary = useApi && apiReport?.last_summary_excerpt
     ? apiReport.last_summary_excerpt
-    : sessionSummaryText(cp, 0);
-  // The live report now carries suggested questions (M5); use them when present,
-  // otherwise fall back to the demo copy.
-  const reportQuestions = useApi && apiReport?.status === 'ready'
-    ? (apiReport.questions?.length ? apiReport.questions : MOCK_QUESTIONS)
-    : MOCK_QUESTIONS;
+    : (mockReport?.last_summary ?? sessionSummaryText(cp, 0));
+  const followUpPoints = reportOpen;
+  const sessionGoals = reportChanges;
+  // Per-patient mock (e.g. Simba) uses custom questions; generic demo uses REPORT_QUESTIONS.
+  const suggestedQuestions = !useApi
+    ? (mockReport?.suggested_questions ?? MOCK_QUESTIONS)
+    : [];
 
   const nextDateLabel = useApi
-    ? formatNextDateChip(nextMeetingStart)
-    : (nextMeetingStart ? formatNextDateChip(nextMeetingStart) : '06.07.2026');
+    ? (nextMeetingStart ? formatMeetingWhen(nextMeetingStart) : 'לא נקבעה')
+    : (mockReport?.nextMeetingDate
+      ? formatIsoDateChip(mockReport.nextMeetingDate)
+      : (nextMeetingStart ? formatMeetingWhen(nextMeetingStart) : '06.07.2026'));
   const nextWhenHint = nextMeetingStart ? formatMeetingWhen(nextMeetingStart) : '';
   const generatedAtLabel = useApi && apiReport?.status === 'ready'
     ? formatGeneratedAt(apiReport.generated_at)
     : '';
 
   const showSkeleton = (!useApi && S.loading) || (useApi && (apiLoading || apiReport?.status === 'pending' || apiReport?.status === 'running'));
-  // A failed live report (e.g. generation unavailable without an AI key) still has
-  // demo fallback content — show it gracefully rather than a blocking error. Only a
-  // hard load error (no report to fall back on) blocks the screen.
-  const reportFailed = useApi && apiReport?.status === 'failed';
-  const showError = useApi && !apiLoading && !!apiError && !reportFailed;
-  const showBody = !showSkeleton && !showError;
+  // A failed/unavailable live report (e.g. the Ollama model is missing) must never block
+  // the page. Fall back to the demo prep body — the content memos above already return
+  // demo copy when no live report is ready — with a subtle notice instead of an error wall.
+  const liveFailed = useApi && !apiLoading && (!!apiError || apiReport?.status === 'failed');
+  const showBody = !showSkeleton;
 
   // audio brief
   const secs = Math.round((S.briefProgress / 100) * 108);
@@ -231,6 +250,11 @@ export default function ReportPage() {
         <div>
           <h1 style={{ margin: '0 0 4px', fontSize: 27, fontWeight: 900, letterSpacing: '-.6px' }}>דוח הכנה לפגישה</h1>
           <p style={{ margin: '0 0 6px', color: 'var(--text-secondary)', fontSize: 15 }}>סיכום אוטומטי לקראת הפגישה הבאה</p>
+          {generatedAtLabel && (
+            <p style={{ margin: '0 0 6px', fontSize: 12.5, color: 'var(--text-muted)' }}>
+              {regenerating ? 'מרעננים… · ' : ''}נוצר: <span dir="ltr">{generatedAtLabel}</span>
+            </p>
+          )}
           <a onClick={goMeetingHistoryFromReport} role="button" tabIndex={0} className="rep-history-link" style={{ display: 'inline-flex', fontSize: 13.5, color: 'var(--primary)', fontWeight: 600, cursor: 'pointer' }}>היסטוריית הפגישות המלאה ›</a>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -252,7 +276,7 @@ export default function ReportPage() {
               {regenerating ? 'מרעננים…' : 'רענון דוח'}
             </button>
           )}
-          <select value={cp.name} onChange={onTimelinePatient} aria-label="בחירת מטופל" style={{ height: 44, border: '1px solid var(--divider)', borderRadius: 10, padding: '0 14px', fontSize: 14, background: 'var(--paper)', color: 'var(--text-2)', outline: 'none', cursor: 'pointer' }}>
+          <select value={cp.name} onChange={onTimelinePatient} aria-label="בחירת מטופל" className="app-select">
             {patientOptions.map((po) => (<option key={po}>{po}</option>))}
           </select>
         </div>
@@ -268,60 +292,52 @@ export default function ReportPage() {
         </div>
       )}
 
-      {showError && (
-        <div style={{ background: 'var(--paper)', border: '1px solid var(--divider)', borderRadius: 10, boxShadow: CARD_SHADOW, padding: 26 }}>
-          <h2 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 700 }}>לא ניתן להציג את הדוח</h2>
-          <p style={{ margin: '0 0 16px', fontSize: 14.5, color: 'var(--text-secondary)', lineHeight: 1.55 }}>
-            {apiError || apiReport?.error || 'יצירת הדוח נכשלה'}
-          </p>
-          <a
-            onClick={goMeetingHistoryFromReport}
-            role="button"
-            tabIndex={0}
-            className="rep-history-link"
-            style={{ display: 'inline-flex', fontSize: 14, color: 'var(--primary)', fontWeight: 700, cursor: 'pointer' }}
-          >
-            מעבר להיסטוריית הפגישות ›
-          </a>
-        </div>
-      )}
-
       {showBody && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {reportFailed && (
-            <div role="status" style={{ background: 'var(--surface-2)', border: '1px solid var(--divider)', borderRadius: 10, padding: '12px 16px', color: 'var(--text-secondary)', fontSize: 13.5 }}>
-              יצירת הדוח החי אינה זמינה כרגע · מוצג תוכן לדוגמה.
+          {liveFailed && (
+            <div role="status" style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: '10px 14px', border: '1px solid var(--border-input)', borderRadius: 10, background: 'var(--paper)', boxShadow: CARD_SHADOW, color: 'var(--text-secondary)', fontSize: 13.5, lineHeight: 1.5 }}>
+              <span>לא הצלחנו לייצר דוח חי כרגע. מוצג דוח הדגמה; אפשר לנסות שוב עם "רענון דוח".</span>
             </div>
           )}
-          <div style={{ background: 'var(--paper)', border: '1px solid var(--divider)', borderRadius: 10, boxShadow: CARD_SHADOW, padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-            <div style={{ width: 52, height: 52, borderRadius: '50%', background: cpView.avBg, color: cpView.avColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 18, flexShrink: 0 }}>{cpView.initials}</div>
-            <div style={{ flex: 1, minWidth: 160 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 3 }}>
-                <span style={{ fontSize: 18, fontWeight: 800 }}>{cpView.name}</span>
+          <div style={{ background: 'var(--paper)', border: '1px solid var(--divider)', borderRadius: 10, boxShadow: CARD_SHADOW, padding: '20px 22px' }}>
+            <h2 style={{ margin: '0 0 14px', fontSize: 16, fontWeight: 800, color: 'var(--text-2)' }}>כרטיס מטופל</h2>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16, flexWrap: 'wrap' }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: cpView.avBg, color: cpView.avColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 17, flexShrink: 0 }}>{cpView.initials}</div>
+              <div style={{ flex: 1, minWidth: 220, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ fontSize: 14.5, lineHeight: 1.5 }}>
+                  <span style={{ fontWeight: 700, color: 'var(--text-2)' }}>שם המטופל: </span>
+                  <span style={{ color: 'var(--text)' }}>{cpView.name}</span>
+                </div>
+                <div style={{ fontSize: 14.5, lineHeight: 1.5 }}>
+                  <span style={{ fontWeight: 700, color: 'var(--text-2)' }}>הפגישה הבאה: </span>
+                  <span dir="ltr" style={{ color: 'var(--primary)', fontWeight: 700 }} title={nextWhenHint}>{nextDateLabel}</span>
+                </div>
+                <div style={{ fontSize: 14.5, lineHeight: 1.5 }}>
+                  <span style={{ fontWeight: 700, color: 'var(--text-2)' }}>טלפון: </span>
+                  <span dir="ltr" style={{ color: 'var(--text)' }}>{cpView.meta}</span>
+                </div>
+                <div style={{ marginTop: 4 }}>
+                  <button
+                    type="button"
+                    onClick={goPatientFromSub}
+                    aria-label="מעבר לתיק מטופל"
+                    className="rep-patient-link rep-patient-file-btn"
+                    style={{
+                      display: 'inline-flex', alignItems: 'center', gap: 6, height: 36, padding: '0 12px',
+                      border: '1px solid var(--border-input)', borderRadius: 8, background: 'var(--paper)',
+                      fontSize: 13, fontWeight: 600, color: 'var(--text-2)', cursor: 'pointer',
+                    }}
+                  >
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" /></svg>
+                    מעבר לתיק מטופל
+                  </button>
+                </div>
               </div>
-              <div style={{ fontSize: 13.5, color: 'var(--text-secondary)' }}>טלפון: <span dir="ltr">{cpView.meta}</span></div>
-              <button type="button" onClick={goPatientFromSub} className="rep-patient-link" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 9, padding: '7px 12px', border: '1px solid var(--primary-border)', borderRadius: 9, background: 'var(--primary-surface)', color: 'var(--primary-dark)', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" /></svg>
-                מעבר לתיק מטופל
-              </button>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 10, background: 'var(--primary-surface)', border: '1px solid var(--primary-border)' }}>
-                <svg viewBox="0 0 24 24" width="17" height="17" fill="var(--primary)"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11z" /></svg>
-                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-2)' }}>הפגישה הבאה</span>
-                <span dir="ltr" style={{ fontSize: 13, fontWeight: 700, color: 'var(--primary)' }} title={nextWhenHint}>{nextDateLabel}</span>
-              </div>
-              {generatedAtLabel && (
-                <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-                  {regenerating ? 'מרעננים… · ' : ''}נוצר: <span dir="ltr">{generatedAtLabel}</span>
-                </span>
-              )}
             </div>
           </div>
 
           <div style={{ background: 'linear-gradient(120deg,var(--accent-grad-1),var(--accent-grad-2))', borderRadius: 10, padding: '22px 24px', color: 'var(--on-accent)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 6 }}>
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="var(--paper)"><path d="M12 2l2.4 7.4H22l-6 4.6 2.3 7.4-6.3-4.6L5.7 21.4 8 14 2 9.4h7.6z" /></svg>
               <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>סקירה מהירה</h2>
             </div>
             <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.65, opacity: .95 }}>{reportIntro}</p>
@@ -332,10 +348,10 @@ export default function ReportPage() {
               <svg viewBox="0 0 24 24" width="24" height="24" fill="var(--on-accent)"><path d={briefIcon} /></svg>
             </button>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 14.5, fontWeight: 700 }}>תקציר קולי מהיר</span>
                 <span style={{ fontSize: 11, fontWeight: 700, padding: '2px 8px', borderRadius: 20, background: 'var(--secondary-bg)', color: 'var(--secondary-strong)' }}>AI</span>
-                <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>הקשבה מהירה בין פגישות · 1:48</span>
+                <span style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>הקשבה מהירה בין פגישות (1:48 דקות)</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 30 }}>
                 {briefBars.map((bar, i) => (<div key={i} style={{ flex: 1, height: bar.h, background: bar.color, borderRadius: 2 }}></div>))}
@@ -352,14 +368,26 @@ export default function ReportPage() {
           </div>
 
           <div style={{ background: 'var(--paper)', border: '1px solid var(--divider)', borderRadius: 10, boxShadow: CARD_SHADOW, padding: 22 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 14 }}>
-              <div style={{ width: 30, height: 30, borderRadius: 8, background: 'var(--primary-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="var(--primary)"><path d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99z" /></svg>
-              </div>
-              <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>נקודות למעקב</h2>
-            </div>
+            <h2 style={{ margin: '0 0 14px', fontSize: 17, fontWeight: 700 }}>נקודות למעקב</h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {reportChanges.map((c) => (
+              {followUpPoints.length === 0 && useApi && apiReport?.status === 'ready' ? (
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                  לא זוהו נקודות למעקב בסיכומים
+                </p>
+              ) : (
+                followUpPoints.map((o) => (
+                  <div key={o} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14.5, color: 'var(--text)', lineHeight: 1.55 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--warning-strong)', flexShrink: 0, marginTop: 8 }}></span>{o}
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          <div style={{ background: 'var(--paper)', border: '1px solid var(--divider)', borderRadius: 10, boxShadow: CARD_SHADOW, padding: 22 }}>
+            <h2 style={{ margin: '0 0 14px', fontSize: 17, fontWeight: 700 }}>מטרות לפגישה הקרובה</h2>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {sessionGoals.map((c) => (
                 <div key={c} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14.5, color: 'var(--text)', lineHeight: 1.55 }}>
                   <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--primary)', flexShrink: 0, marginTop: 8 }}></span>{c}
                 </div>
@@ -367,38 +395,20 @@ export default function ReportPage() {
             </div>
           </div>
 
-          <div style={{ background: 'var(--paper)', border: '1px solid var(--divider)', borderRadius: 10, boxShadow: CARD_SHADOW, padding: 22 }}>
-            <h2 style={{ margin: '0 0 14px', fontSize: 17, fontWeight: 700 }}>מטרות לפגישה הקרובה</h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {reportOpen.length === 0 && useApi && apiReport?.status === 'ready' ? (
-                <p style={{ margin: 0, fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5 }}>
-                  לא זוהו מטרות לפגישה הקרובה בסיכומים
-                </p>
-              ) : (
-                reportOpen.map((o) => (
-                  <div key={o} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14, color: 'var(--text)', lineHeight: 1.5 }}>
-                    <svg viewBox="0 0 24 24" width="17" height="17" fill="var(--warning-strong)" style={{ flexShrink: 0, marginTop: 1 }}><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM13 17h-2v-2h2v2zm0-4h-2V7h2v6z" /></svg>{o}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-
-          {reportQuestions.length > 0 && (
-            <div style={{ background: 'var(--primary-surface)', border: '1px solid var(--primary-border)', borderRadius: 10, padding: 22 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 16 }}>
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="var(--primary)"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 12h-2v-2h2v2zm1.07-7.75l-.9.92C13.45 9.9 13 10.5 13 12h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H8c0-2.21 1.79-4 4-4s4 1.79 4 4c0 .88-.36 1.68-.93 2.25z" /></svg>
-                <h2 style={{ margin: 0, fontSize: 17, fontWeight: 700 }}>שאלות מוצעות למפגש</h2>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                {reportQuestions.map((q) => (
-                  <div key={q} style={{ background: 'var(--paper)', borderRadius: 10, padding: '14px 16px', border: '1px solid var(--divider)' }}>
-                    <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.6, color: 'var(--text)', fontStyle: 'italic' }}>&quot;{q}&quot;</p>
+          {suggestedQuestions.length > 0 && (
+            <div style={{ background: 'var(--paper)', border: '1px solid var(--divider)', borderRadius: 10, boxShadow: CARD_SHADOW, padding: 22 }}>
+              <h2 style={{ margin: '0 0 14px', fontSize: 17, fontWeight: 700 }}>שאלות מוצעות למפגש</h2>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {suggestedQuestions.map((q) => (
+                  <div key={q} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, fontSize: 14.5, color: 'var(--text)', lineHeight: 1.55 }}>
+                    <span style={{ width: 7, height: 7, borderRadius: '50%', background: 'var(--primary)', flexShrink: 0, marginTop: 8 }}></span>
+                    <span>&ldquo;{q}&rdquo;</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
+          <AiDisclaimer />
         </div>
       )}
     </div>

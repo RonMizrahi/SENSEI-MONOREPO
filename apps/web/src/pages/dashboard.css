@@ -107,23 +107,6 @@
   box-shadow: 0 1px 3px rgba(16, 40, 80, 0.06);
 }
 
-.calh-create-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  padding: 13px;
-  border-radius: 12px;
-  border: none;
-  background: var(--primary);
-  color: var(--on-accent);
-  font-weight: 700;
-  font-size: 14px;
-  cursor: pointer;
-  font-family: inherit;
-}
-.calh-create-btn:hover { background: var(--primary-dark); }
-
 /* event block */
 .calh-event { transition: box-shadow 0.12s ease; }
 .calh-event:hover { box-shadow: 0 2px 8px rgba(16, 40, 80, 0.18); }
@@ -140,4 +123,56 @@
   .calh-body { flex-direction: column; }
   .calh-side { width: 100%; flex-direction: row; flex-wrap: wrap; }
   .calh-side > * { flex: 1; min-width: 220px; }
+  /* Tablet/touch: the today's-list quick actions (patient file · upload · prep ·
+     play) reach the 44px touch-target floor. min-height layers over the compact
+     inline height:30 (kept for the mouse-driven desktop shell) without !important,
+     so the used height is 44 on touch and stays 30 on desktop. */
+  .calh-agenda-act { min-height: 44px; }
+}
+
+/* ---- at-a-glance workload strip ---- */
+.dash-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.dash-summary-pill {
+  flex: 0 1 auto;
+  min-width: 168px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-block: 13px;
+  padding-inline: 15px;
+  background: var(--surface);
+  border: 1px solid var(--divider);
+  border-radius: 12px;
+  box-shadow: 0 1px 2px rgba(16, 40, 80, 0.05);
+  text-align: start;
+  font-family: inherit;
+}
+.dash-summary-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: var(--primary-tint);
+  color: var(--primary);
+  flex-shrink: 0;
+}
+.dash-summary-text { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.dash-summary-value { font-size: 22px; font-weight: 800; color: var(--text); letter-spacing: -0.02em; }
+.dash-summary-label { font-size: 12.5px; font-weight: 600; color: var(--text-muted); }
+.dash-summary-pill--action {
+  cursor: pointer;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.dash-summary-pill--action:hover { border-color: var(--primary-border); box-shadow: 0 2px 8px rgba(16, 40, 80, 0.1); }
+.dash-summary-chev { color: var(--text-muted); flex-shrink: 0; margin-inline-start: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .dash-summary-pill--action { transition: none; }
 }

@@ -2,24 +2,43 @@
 // nextMeetingReport routes. Same content as the desktop ReportPage — the LIVE
 // senseiapi next-meeting report when configured (via useNextMeetingReport),
 // falling back to the shared demo copy otherwise — in a touch layout, plus
-// start-recording / patient CTAs.
+// upload / patient CTAs.
 import { useState } from 'react';
 import { useApp } from '../../store/AppStore';
 import { getPatient } from '../../utils';
 import { sessionInsight, sessionSummaryText } from '../../data/sessionDetail';
 import { useNextMeetingReport } from '../../hooks/useNextMeetingReport';
+import { usePatientNextMeeting } from '../../hooks/usePatientNextMeeting';
+import { formatMeetingWhen } from '../patient/UpcomingMeetingList';
 import { ChevronStartIcon } from './icons';
 
 interface Props {
-  onOpenRecording: (pid: string, name: string, meetingId?: string) => void;
+  onOpenRecording?: (pid: string, name: string, meetingId?: string) => void;
 }
 
-export default function MobilePrepReport({ onOpenRecording }: Props) {
+export default function MobilePrepReport({ onOpenRecording }: Props = {}) {
   const { S, navigate } = useApp();
   const cp = getPatient(S.patients, S.patientId, S.archivedPatients || []);
   const [goalsDone, setGoalsDone] = useState<Record<number, boolean>>({});
 
-  const report = useNextMeetingReport(cp.id, cp.name, sessionSummaryText(cp, 0), sessionInsight(cp, 0));
+  const reportMeetingId = (S.reportMeetingId as string | null | undefined) || undefined;
+  const report = useNextMeetingReport(
+    cp.id,
+    cp.name,
+    sessionSummaryText(cp, 0),
+    sessionInsight(cp, 0),
+    reportMeetingId,
+  );
+  const { nextMeetingStart } = usePatientNextMeeting(
+    cp.id,
+    cp.name,
+    S.scheduledAppts || [],
+    S.patients,
+    S.calendarRefreshNonce,
+  );
+  const nextMeetingLabel = nextMeetingStart
+    ? formatMeetingWhen(nextMeetingStart)
+    : 'לא נקבעה פגישה קרובה';
   // Mirror ReportPage: skeleton / error / body are mutually exclusive, so demo
   // fallback copy is never shown as if it were the patient's live report.
   const showBody = !report.loading && !report.error;
@@ -32,7 +51,9 @@ export default function MobilePrepReport({ onOpenRecording }: Props) {
         </button>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>דוח הכנה · {cp.name}</div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>סיכום אוטומטי לקראת הפגישה הבאה</div>
+          <div style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 500 }}>
+            הפגישה הבאה: {nextMeetingLabel}
+          </div>
         </div>
         <span className="mob-badge">נוצר ע״י AI</span>
       </div>
@@ -110,7 +131,8 @@ export default function MobilePrepReport({ onOpenRecording }: Props) {
       </div>
 
       <div className="mob-footer">
-        <button type="button" className="mob-ghost-btn" onClick={() => onOpenRecording(cp.id, cp.name)}>התחל הקלטה</button>
+        <button type="button" className="mob-ghost-btn" onClick={() => onOpenRecording?.(cp.id, cp.name)}>התחל הקלטה</button>
+        <button type="button" className="mob-ghost-btn" onClick={() => navigate('upload', { patientId: cp.id, upload: { state: 'idle', progress: 0, fileName: '', error: '' } })}>העלאת הקלטה</button>
         <button type="button" className="mob-primary-btn" style={{ marginTop: 0 }} onClick={() => navigate('patient', { patientId: cp.id })}>תיק מטופל</button>
       </div>
     </div>

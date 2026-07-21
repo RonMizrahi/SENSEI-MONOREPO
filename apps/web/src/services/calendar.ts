@@ -1,7 +1,8 @@
 // Calendar service — mock Google-style fixture + optional senseiapi `/calendar` merge.
 import { apiRequest, isApiConfigured } from './apiClient';
+import { fmtDate, fmtTime } from '../utils/dates';
 
-export const CALENDAR_TIME_ZONE = 'Asia/Jerusalem';
+const CALENDAR_TIME_ZONE = 'Asia/Jerusalem';
 
 export interface CalendarUiEvent {
   id: string
@@ -30,6 +31,9 @@ export interface DbCalendarEvent {
   patient_id?: string | null
 }
 
+/** Alias: a DB meeting row (`calendar_events.id`). */
+export type DbMeeting = DbCalendarEvent
+
 export const dayKey = (d: Date) =>
   d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 
@@ -46,13 +50,13 @@ export const weekEnd = (d: Date) => {
   return e;
 };
 
-export const weekLastDay = (d: Date) => {
+const weekLastDay = (d: Date) => {
   const last = weekStart(d);
   last.setDate(last.getDate() + 6);
   return last;
 };
 
-export function normalizeGoogleEvents(items: any[]): CalendarUiEvent[] {
+function normalizeGoogleEvents(items: any[]): CalendarUiEvent[] {
   return (items || [])
     .filter((e) => e && e.status !== 'cancelled' && e.start)
     .map((e) => {
@@ -87,7 +91,7 @@ export function normalizeGoogleEvents(items: any[]): CalendarUiEvent[] {
     .sort((a, b) => +a.start - +b.start);
 }
 
-export function buildCalFixtureItems(weekAnchor = new Date()) {
+function buildCalFixtureItems(weekAnchor = new Date()) {
   const base = weekStart(weekAnchor);
   const iso = (off: number, h: number, m: number) => {
     const d = new Date(base);
@@ -134,7 +138,7 @@ export async function loadCalFixture(weekAnchor = new Date()) {
 
 const normName = (value: string) => value.trim().toLocaleLowerCase('he-IL');
 
-export function patientIdsMatch(a: string | null | undefined, b: string | null | undefined): boolean {
+function patientIdsMatch(a: string | null | undefined, b: string | null | undefined): boolean {
   if (!a || !b) return false;
   return String(a).toLowerCase() === String(b).toLowerCase();
 }
@@ -144,16 +148,26 @@ export function defaultScheduleForm(pid: string, now = new Date()) {
   const slot = new Date(now);
   slot.setMinutes(slot.getMinutes() + 30 - (slot.getMinutes() % 30));
   if (slot <= now) slot.setMinutes(slot.getMinutes() + 30);
+  // Keep the default within working hours (09:00–20:00): after 20:00 roll to
+  // 09:00 the next day; in the small hours (before 08:00) roll to 09:00 the same
+  // day, so opening the app late/early never pre-fills an unrealistic session time.
   if (slot.getHours() >= 20) {
     slot.setDate(slot.getDate() + 1);
     slot.setHours(9, 0, 0, 0);
+  } else if (slot.getHours() < 8) {
+    slot.setHours(9, 0, 0, 0);
   }
-  const time = String(slot.getHours()).padStart(2, '0') + ':' + String(slot.getMinutes()).padStart(2, '0');
+  const time = fmtTime(slot);
   return { pid, date: dayKey(slot), time, dur: '50', description: '' };
 }
 
 export function isUpcomingEvent(event: CalendarUiEvent, now = new Date()): boolean {
   return new Date(event.end) > now;
+}
+
+/** Ended meetings — complementary to `isUpcomingEvent` (uses end time). */
+export function isPastEvent(event: CalendarUiEvent, now = new Date()): boolean {
+  return new Date(event.end) <= now;
 }
 
 export function eventMatchesPatient(
@@ -184,6 +198,7 @@ export function localApptsToUiEvents(
     .filter((e) => isUpcomingEvent(e, now));
 }
 
+/** Meeting API id from a UI event id (`calendar_events.id`, with optional `db-` prefix). */
 export function dbEventApiId(uiEventId: string): string {
   return uiEventId.startsWith('db-') ? uiEventId.slice(3) : uiEventId;
 }
@@ -231,12 +246,10 @@ export function mergeCalendarEvents(...groups: CalendarUiEvent[][]): CalendarUiE
 }
 
 /** Same patient + date + start time — used to collapse local + API duplicates. */
-export function calendarEventSlotKey(event: CalendarUiEvent): string {
+function calendarEventSlotKey(event: CalendarUiEvent): string {
   const start = new Date(event.start);
   const pid = (event.patientId ?? '').toLowerCase();
-  return pid + '@' + dayKey(start) + '@'
-    + String(start.getHours()).padStart(2, '0') + ':'
-    + String(start.getMinutes()).padStart(2, '0');
+  return pid + '@' + dayKey(start) + '@' + fmtTime(start);
 }
 
 export function mergeCalendarEventsUnique(...groups: CalendarUiEvent[][]): CalendarUiEvent[] {
@@ -287,7 +300,7 @@ export function eventGuestName(event: CalendarUiEvent): string {
 export function formatWeekRange(anchor: Date): string {
   const start = weekStart(anchor);
   const end = weekLastDay(anchor);
-  const fmtDay = (d: Date) => d.getDate() + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.' + d.getFullYear();
+  const fmtDay = fmtDate;
   return fmtDay(start) + ' – ' + fmtDay(end);
 }
 
@@ -318,7 +331,7 @@ export async function loadCalendarEvents(opts: {
   }
 }
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export function buildAppointmentTimes(
   time: string,
@@ -346,6 +359,7 @@ export interface CalendarEventCreatePayload {
   patient_id?: string | null
 }
 
+/** Meeting API id from a UI event id (`calendar_events.id`, with optional `db-` prefix). */
 export function resolveCalendarEventApiId(eventId: string): string | null {
   if (eventId.startsWith('db-')) return eventId.slice(3);
   if (UUID_RE.test(eventId)) return eventId;
@@ -464,4 +478,42 @@ export async function loadPatientUpcomingEvents(opts: {
     .filter((e) => eventMatchesPatient(e, opts.patientId, opts.patientName))
     .filter((e) => isUpcomingEvent(e, now))
     .sort((a, b) => +a.start - +b.start);
+}
+
+/** Past meetings for one patient (newest first). Live API only — demo session
+ *  history stays on `buildPatientSessions` / seed content.
+ *
+ *  The calendar API caps a single query at 365 days. We request exactly that
+ *  window ending at "now" so recent past meetings are never dropped.
+ */
+export async function loadPatientPastEvents(opts: {
+  patientId: string
+  patientName: string
+  signal?: AbortSignal
+  resolvePatientName?: (patientId: string | null | undefined) => string | undefined
+}): Promise<CalendarUiEvent[]> {
+  if (!isApiConfigured()) return [];
+
+  const now = new Date();
+  const rangeEnd = new Date(now);
+  const rangeStart = new Date(rangeEnd.getTime() - 365 * 24 * 60 * 60 * 1000);
+  rangeStart.setHours(0, 0, 0, 0);
+
+  let events: CalendarUiEvent[] = [];
+  try {
+    events = await fetchDbCalendarEvents(
+      rangeStart,
+      opts.signal,
+      opts.resolvePatientName,
+      rangeEnd,
+    );
+  } catch (e: any) {
+    if (e?.name === 'AbortError' && opts.signal?.aborted) throw e;
+    return [];
+  }
+
+  return events
+    .filter((e) => eventMatchesPatient(e, opts.patientId, opts.patientName))
+    .filter((e) => isPastEvent(e, now))
+    .sort((a, b) => +b.start - +a.start);
 }

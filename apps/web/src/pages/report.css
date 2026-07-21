@@ -3,6 +3,8 @@
 .rep-crumb:hover { color: var(--primary) !important; }
 .rep-history-link:hover { text-decoration: underline !important; }
 .rep-brief-btn:hover { background: var(--primary-dark) !important; }
+.rep-patient-link:hover,
+.rep-patient-file-btn:hover { background: var(--primary-surface) !important; border-color: var(--primary-border) !important; color: var(--primary) !important; }
 
 @media (max-width: 720px) {
   .rep-grid2 { grid-template-columns: 1fr !important; }

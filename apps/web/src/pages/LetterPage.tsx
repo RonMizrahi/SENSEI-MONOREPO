@@ -18,20 +18,23 @@ export default function LetterPage() {
 
   const defaultNotes = () => 'מטופל בטיפול. מוטיבציה גבוהה ושיתוף פעולה. הומלץ על המשך מעקב שבועי ועבודה על כלי ויסות.';
 
-  const letterDate = '30.06.2026';
+  const now = new Date();
+  const letterDate = String(now.getDate()).padStart(2, '0')
+    + '.' + String(now.getMonth() + 1).padStart(2, '0')
+    + '.' + String(now.getFullYear());
   const letterText = [
     'לכבוד,',
     'גורם מטפל / גורם מפנה / לתיק,',
     '',
     'הנדון: סיכום טיפול: ' + cp.name,
     '',
-    hg('אני [[החתום|החתומה]] מטה, ד״ר רותם שגב, פסיכולוגית קלינית, [[מאשר|מאשרת]] כי ', PS.gender) + cp.name + ', טלפון ' + cp.phone + ', מטופל/ת אצלי מאז ' + formatPatientSince(cp.created_at) + ' במסגרת טיפול פסיכולוגי.',
+    hg('אני [[החתום|החתומה]] מטה, ד״ר רותם שגב, פסיכולוגית קלינית, [[מאשר|מאשרת]] כי ', PS.gender) + cp.name + ', טלפון ' + cp.phone + hg(', [[מטופל|מטופלת|בטיפול]] אצלי מאז ', (cp as any).gender) + formatPatientSince(cp.created_at) + ' במסגרת טיפול פסיכולוגי.',
     '',
     'להלן עיקרי המצב הנוכחי:',
     '',
     '• ' + (S.notesOverrides[cp.id] || defaultNotes()),
     '',
-    'הטיפול ממשיך על בסיס שבועי. מצב המטופל/ת יציב וניכרת התקדמות לאורך הזמן.',
+    hg('הטיפול ממשיך על בסיס שבועי. [[מצב המטופל יציב וניכרת|מצב המטופלת יציב וניכרת|המצב יציב וניכרת]] התקדמות לאורך הזמן.', (cp as any).gender),
     '',
     'בברכה,',
     'ד״ר רותם שגב | פסיכולוגית קלינית | מספר רישיון 27-104882',

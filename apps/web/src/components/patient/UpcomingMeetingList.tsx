@@ -1,7 +1,5 @@
 import { dayKey, type CalendarUiEvent } from '../../services/calendar';
-
-export const fmtTime = (d: Date) =>
-  String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+import { fmtTime } from '../../utils/dates';
 
 export const formatMeetingWhen = (start: Date) => {
   const todayKey = dayKey(new Date());
