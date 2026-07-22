@@ -105,7 +105,8 @@ JSON) are the contract. Interactive docs: **Swagger at `/docs`** (+ `/docs/json`
 | Calendar  | `GET/POST/PATCH/DELETE /calendar` (`?time_zone=`, `from`/`to`; defaults to the current week)                                             |
 | Audio     | `POST /audio/upload` (multipart) → transcription + queued summary; `GET /audio`, `GET/DELETE /audio/{id}`, `POST /audio/{id}/transcribe` |
 | Summaries | `GET/POST /meetings/{id}/summary` (202 while pending/running)                                                                            |
-| Reports   | `GET/POST /patients/{id}/next-meeting-report`                                                                                            |
+| Reports   | `GET/POST /patients/{id}/next-meeting-report`; per-meeting: `GET /patients/{id}/meeting-reports`, `GET/POST /patients/{id}/meeting-reports/{meetingId}` |
+| Assistant | `POST /assistant/chat` (streams a Vercel AI-SDK UI Message Stream); context: `GET /assistant/context/{patients,agenda,patient/{id}/cadence,patient/{id}/meetings}` |
 | Health    | `GET /` (welcome), `GET /health` (liveness), `GET /ready` (readiness — 503 when the DB is down, `"mock"` in mock mode)                   |
 
 Demo login (seeded in mock mode; the SPA auto-registers it against a real DB):
