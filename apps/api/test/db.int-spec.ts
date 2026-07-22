@@ -16,6 +16,7 @@ const USER_PROFILE_SETTINGS_MIGRATION = '0009_user_profile_settings.sql';
 const SEED_DEMO_PROFILE_MIGRATION = '0010_seed_demo_profile.sql';
 const REPORT_QUESTIONS_NOTES_MIGRATION = '0011_report_questions_and_notes.sql';
 const SEED_DEMO_REPORTS_NOTES_MIGRATION = '0012_seed_demo_reports_notes.sql';
+const MEETING_REPORTS_MIGRATION = '0013_meeting_reports.sql';
 // Every versioned SQL file the boot-time runner applies, in filename order. Seed
 // migrations apply (and are tracked) in every env; their inserts are gated by
 // SEED_DEMO_DATA, so this list is identical across dev and prod.
@@ -32,6 +33,7 @@ const EXPECTED_MIGRATIONS = [
   SEED_DEMO_PROFILE_MIGRATION,
   REPORT_QUESTIONS_NOTES_MIGRATION,
   SEED_DEMO_REPORTS_NOTES_MIGRATION,
+  MEETING_REPORTS_MIGRATION,
 ];
 const EXPECTED_TABLES = [
   '_migrations',
