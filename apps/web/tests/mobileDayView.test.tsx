@@ -26,7 +26,7 @@ function mount() {
 }
 
 beforeEach(() => setMobile(true));
-afterEach(() => { cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
+afterEach(() => { vi.useRealTimers(); cleanup(); localStorage.clear(); vi.restoreAllMocks(); });
 
 /** Select Monday (strip index 1 — Sunday is 0) which always carries fixture events. */
 async function selectMondayWithAppts(container: HTMLElement) {
@@ -66,6 +66,10 @@ describe('mobile day view', () => {
   });
 
   it('day-strip shows a meeting dot only on days with scheduled appointments', async () => {
+    // Freeze only Date (timers stay real for waitFor) to a fixed reference day — the
+    // day-strip is built relative to "today", so this assertion is otherwise date-fragile.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 6, 21, 9, 0, 0));
     const pad = (n: number) => String(n).padStart(2, '0');
     const k = (days: number) => { const d = new Date(); d.setDate(d.getDate() + days); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); };
     localStorage.setItem(PKEY, JSON.stringify({

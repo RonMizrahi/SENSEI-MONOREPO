@@ -1,6 +1,6 @@
 // Calendar drag-and-drop: dragging a locally-scheduled appointment onto a day
 // column reschedules it in place (updates date/time), without creating a duplicate.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react';
 import { AppStoreProvider } from '../src/store/AppStore';
 import App from '../src/App';
@@ -11,7 +11,11 @@ function mount(patch: Record<string, any>) {
   return render(<AppStoreProvider><App /></AppStoreProvider>);
 }
 const settle = () => act(() => new Promise((r) => setTimeout(r, 150)));
-afterEach(() => { cleanup(); localStorage.clear(); });
+// Freeze only the Date clock (timers stay real, so settle()/waitFor still work) to a
+// fixed reference day. The week/day-column mapping is relative to "today"; without a
+// frozen clock this test is date-fragile and fails on certain calendar dates.
+beforeEach(() => { vi.useFakeTimers({ toFake: ['Date'] }); vi.setSystemTime(new Date(2026, 6, 21, 9, 0, 0)); });
+afterEach(() => { vi.useRealTimers(); cleanup(); localStorage.clear(); });
 function todayKey() {
   const d = new Date();
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
