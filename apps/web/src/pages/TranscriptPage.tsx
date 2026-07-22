@@ -46,6 +46,11 @@ export default function TranscriptPage() {
     const goPatientStored = () => navigate('patient', { patientId: cp.id });
     const goSummaryStored = () => navigate('summary', { patientId: cp.id });
     const onStoredSearch = (e: any) => set({ transcriptSearch: e.target.value });
+    const deleteAndReupload = () => set({
+      dialog: 'delTranscript',
+      dialogTranscriptPatientId: cp.id,
+      dialogMeetingId: stored.meetingId || S.meetingId || null,
+    });
 
     return (
       <div style={{ maxWidth: 900, margin: '0 auto' }}>
@@ -61,15 +66,19 @@ export default function TranscriptPage() {
               {cp.name} · {stored.language || 'he'} · מתמלול Whisper
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <button onClick={copyStored} className="trs-copy-btn" style={{ height: 42, padding: '0 16px', border: '1px solid var(--border-input)', borderRadius: 10, background: 'var(--paper)', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text-2)' }}>העתקה</button>
             <button onClick={downloadStored} className="trs-copy-btn" style={{ height: 42, padding: '0 16px', border: '1px solid var(--border-input)', borderRadius: 10, background: 'var(--paper)', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--text-2)' }}>הורדה</button>
+            <button onClick={deleteAndReupload} className="trs-copy-btn" style={{ display: 'flex', alignItems: 'center', gap: 7, height: 42, padding: '0 16px', border: '1px solid var(--error)', borderRadius: 10, background: 'var(--paper)', fontSize: 14, fontWeight: 600, cursor: 'pointer', color: 'var(--error-dark)' }}>
+              <svg viewBox="0 0 24 24" width="17" height="17" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" /></svg>
+              מחיקה והעלאה מחדש
+            </button>
             <button onClick={goSummaryStored} style={{ height: 42, padding: '0 16px', border: 'none', borderRadius: 10, background: 'var(--primary)', color: 'var(--paper)', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}>סיכום</button>
           </div>
         </div>
 
         <div style={{ position: 'relative', marginBottom: 16 }}>
-          <input value={S.transcriptSearch} onChange={onStoredSearch} aria-label="חיפוש בתמלול" placeholder="חיפוש בתמלול…" className="trs-search" style={{ width: '100%', height: 44, border: '1px solid var(--divider)', background: 'var(--paper)', borderRadius: 10, padding: '0 14px', fontSize: 14.5, outline: 'none', color: 'var(--text)' }} />
+          <input value={S.transcriptSearch} onChange={onStoredSearch} aria-label="חיפוש בתמלול" placeholder="חיפוש בתמלול…" className="trs-search" style={{ width: '100%', height: 44, border: '1px solid var(--primary-border)', background: 'var(--primary-surface)', borderRadius: 10, padding: '0 14px', fontSize: 14.5, outline: 'none', color: 'var(--text)' }} />
           {!!tq && (<span style={{ position: 'absolute', insetInlineEnd: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 12.5, color: 'var(--text-secondary)' }}>{matchLabel}</span>)}
         </div>
 
@@ -166,7 +175,7 @@ export default function TranscriptPage() {
 
       <div style={{ position: 'relative', marginBottom: 16 }}>
         <svg viewBox="0 0 24 24" width="19" height="19" fill="var(--text-muted)" style={{ position: 'absolute', insetInlineStart: 13, top: '50%', transform: 'translateY(-50%)' }}><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.49 4.49 0 0 1 9.5 14z" /></svg>
-        <input value={S.transcriptSearch} onChange={onTranscriptSearch} aria-label="חיפוש בתמלול" placeholder="חיפוש בתמלול…" className="trs-search" style={{ width: '100%', height: 44, border: '1px solid var(--divider)', background: 'var(--paper)', borderRadius: 10, padding: '0 42px 0 14px', fontSize: 14.5, outline: 'none', color: 'var(--text)' }} />
+        <input value={S.transcriptSearch} onChange={onTranscriptSearch} aria-label="חיפוש בתמלול" placeholder="חיפוש בתמלול…" className="trs-search" style={{ width: '100%', height: 44, border: '1px solid var(--primary-border)', background: 'var(--primary-surface)', borderRadius: 10, padding: '0 42px 0 14px', fontSize: 14.5, outline: 'none', color: 'var(--text)' }} />
         {transcriptHasQuery && (<span style={{ position: 'absolute', insetInlineEnd: 14, top: '50%', transform: 'translateY(-50%)', fontSize: 12.5, color: 'var(--text-secondary)' }}>{transcriptMatchLabel}</span>)}
       </div>
 

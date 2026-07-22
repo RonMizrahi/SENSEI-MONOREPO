@@ -38,6 +38,6 @@ import { InProcessSummaryQueue } from './summary-queue.service';
     provideMockSwappable<Summarizer>(SUMMARIZER, AnthropicSummarizer, MockSummarizer),
     { provide: SUMMARY_QUEUE, useClass: InProcessSummaryQueue },
   ],
-  exports: [SUMMARY_QUEUE, SUMMARIZER],
+  exports: [SUMMARY_QUEUE, SUMMARIZER, SUMMARIES_REPOSITORY],
 })
 export class SummariesModule {}

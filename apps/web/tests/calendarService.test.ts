@@ -228,3 +228,117 @@ describe('calendar service — loadCalendarEvents', () => {
     expect(+event.end).toBeGreaterThan(+event.start);
   });
 });
+
+describe('calendar service — API-mode write & read paths', () => {
+  const UUID = '44444444-4444-4444-4444-444444444444';
+  const okRow = (fk: string, pid: string) => ({
+    id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', title: 'פגישה', description: '',
+    start_at: fk + 'T10:00:00+03:00', end_at: fk + 'T11:00:00+03:00', created_at: fk + 'T09:00:00+03:00',
+    therapist_id: '11111111-1111-1111-1111-111111111111', patient_id: pid,
+  });
+
+  it('createCalendarEvent POSTs to /calendar and includes a UUID patient_id', async () => {
+    const cal = await loadCalendarModule(BASE);
+    const calls: any[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (url: any, init: any) => {
+      calls.push({ url: String(url), init });
+      return new Response(JSON.stringify({ id: 'evt-1' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+    }));
+    const out = await cal.createCalendarEvent({ title: 'פגישה', description: null, start_at: '2026-06-25T10:00:00+03:00', end_at: '2026-06-25T11:00:00+03:00', patient_id: UUID } as any);
+    expect(out.id).toBe('evt-1');
+    const post = calls.find((c) => c.url.includes('/calendar') && c.init?.method === 'POST');
+    expect(post).toBeTruthy();
+    expect(JSON.parse(post.init.body).patient_id).toBe(UUID);
+  });
+
+  it('createCalendarEvent omits a non-UUID patient_id (server validates UUIDs)', async () => {
+    const cal = await loadCalendarModule(BASE);
+    const calls: any[] = [];
+    vi.stubGlobal('fetch', vi.fn(async (_url: any, init: any) => {
+      calls.push({ init }); return new Response(JSON.stringify({ id: 'evt-2' }), { status: 201, headers: { 'Content-Type': 'application/json' } });
+    }));
+    await cal.createCalendarEvent({ title: 'פגישה', description: null, start_at: '2026-06-25T10:00:00+03:00', end_at: '2026-06-25T11:00:00+03:00', patient_id: 'p5' } as any);
+    expect(JSON.parse(calls[0].init.body).patient_id).toBeUndefined();
+  });
+
+  it('loadPatientUpcomingEvents (API mode) returns the patient\'s upcoming events', async () => {
+    const cal = await loadCalendarModule(BASE);
+    const f = new Date(); f.setDate(f.getDate() + 3); const fk = f.toISOString().slice(0, 10);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([okRow(fk, 'p3')]), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+    const out = await cal.loadPatientUpcomingEvents({ patientId: 'p3', patientName: 'דנה', scheduledAppts: [] });
+    expect(out.length).toBeGreaterThanOrEqual(1);
+    expect(out.every((e) => new Date(e.end) > new Date())).toBe(true);
+  });
+
+  it('loadPatientUpcomingEvents falls back to local appts when the API errors', async () => {
+    const cal = await loadCalendarModule(BASE);
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new Error('network'); }));
+    const f = new Date(); f.setDate(f.getDate() + 2); const fk = f.toISOString().slice(0, 10);
+    const out = await cal.loadPatientUpcomingEvents({ patientId: 'p3', patientName: 'דנה', scheduledAppts: [{ pid: 'p3', date: fk, time: '10:00', dur: 50 }] });
+    expect(out.length).toBeGreaterThanOrEqual(1); // API failed → local appt still surfaces
+  });
+
+  it('loadPatientPastEvents returns only past meetings for the patient, newest first', async () => {
+    const pid = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    const now = new Date();
+    const older = new Date(now); older.setMonth(older.getMonth() - 2);
+    const newer = new Date(now); newer.setMonth(newer.getMonth() - 1);
+    const future = new Date(now); future.setMonth(future.getMonth() + 1);
+    const iso = (d: Date, h: number) => {
+      const x = new Date(d); x.setHours(h, 0, 0, 0); return x.toISOString();
+    };
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify([
+      {
+        id: '11111111-1111-1111-1111-111111111111',
+        title: 'ישנה', description: null,
+        start_at: iso(older, 10), end_at: iso(older, 11),
+        created_at: iso(older, 8),
+        therapist_id: '11111111-1111-1111-1111-111111111111',
+        patient_id: pid,
+      },
+      {
+        id: '22222222-2222-2222-2222-222222222222',
+        title: 'חדשה יותר', description: null,
+        start_at: iso(newer, 10), end_at: iso(newer, 11),
+        created_at: iso(newer, 8),
+        therapist_id: '11111111-1111-1111-1111-111111111111',
+        patient_id: pid,
+      },
+      {
+        id: '33333333-3333-3333-3333-333333333333',
+        title: 'עתידית', description: null,
+        start_at: iso(future, 10), end_at: iso(future, 11),
+        created_at: iso(future, 8),
+        therapist_id: '11111111-1111-1111-1111-111111111111',
+        patient_id: pid,
+      },
+      {
+        id: '44444444-4444-4444-4444-444444444444',
+        title: 'מטופל אחר', description: null,
+        start_at: iso(newer, 10), end_at: iso(newer, 11),
+        created_at: iso(newer, 8),
+        therapist_id: '11111111-1111-1111-1111-111111111111',
+        patient_id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+      },
+    ]), { status: 200, headers: { 'Content-Type': 'application/json' } })));
+
+    const cal = await loadCalendarModule(BASE);
+    const events = await cal.loadPatientPastEvents({
+      patientId: pid,
+      patientName: 'Live Patient',
+      resolvePatientName: (id) => (id === pid ? 'Live Patient' : undefined),
+    });
+
+    expect(events.map((e) => e.title)).toEqual(['חדשה יותר', 'ישנה']);
+    expect(events.every((e) => cal.isPastEvent(e))).toBe(true);
+  });
+
+  it('loadPatientPastEvents returns [] when the API is not configured', async () => {
+    const cal = await loadCalendarModule('');
+    const events = await cal.loadPatientPastEvents({
+      patientId: 'p1',
+      patientName: 'דנה לוי',
+    });
+    expect(events).toEqual([]);
+  });
+});

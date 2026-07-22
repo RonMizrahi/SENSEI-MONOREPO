@@ -63,13 +63,4 @@ describe('accessibility (axe) — mobile experience', () => {
     await settle();
     expect(await axe(container, AXE_OPTS)).toHaveNoViolations();
   }, 15000);
-
-  it('recording overlay', async () => {
-    const { container } = mount({ route: 'report', patientId: 'p3' });
-    await waitFor(() => expect(container.querySelector('.mob-screen')).toBeTruthy());
-    fireEvent.click([...container.querySelectorAll('button')].find((b) => b.textContent === 'התחל הקלטה') as HTMLElement);
-    await waitFor(() => expect(document.querySelector('.mob-record')).toBeTruthy());
-    await settle();
-    expect(await axe(document.body, AXE_OPTS)).toHaveNoViolations();
-  }, 15000);
 });

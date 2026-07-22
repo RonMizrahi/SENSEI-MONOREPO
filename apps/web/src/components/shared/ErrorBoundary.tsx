@@ -16,6 +16,24 @@ export function isStaleChunkError(error: Error | null): boolean {
   return !!error && /dynamically imported module|Importing a module script failed|Loading chunk|error loading/i.test(String(error.message || error));
 }
 
+// One automatic recovery per tab session for a VERIFIED stale-chunk mismatch:
+// reload once without asking (fresh HTML → current hashes; unsaved work is safe —
+// the store flushes to localStorage on pagehide). The sessionStorage flag bounds
+// it to a single retry: if the chunk still fails after that one reload (e.g. a
+// broken deploy), we stop auto-reloading and show the manual recovery card
+// instead of looping. The flag is per-tab (sessionStorage), so multi-tab clients
+// each recover independently without coordinating reload storms.
+const RELOAD_ONCE_KEY = 'sensei_stale_reload_once';
+export function attemptStaleChunkReload(): boolean {
+  try {
+    if (sessionStorage.getItem(RELOAD_ONCE_KEY)) return false;
+    sessionStorage.setItem(RELOAD_ONCE_KEY, '1');
+  } catch { return false; } // storage unavailable → manual card, never a loop
+  console.info('[sensei] stale chunk after deploy — reloading once to the current version');
+  window.location.reload();
+  return true;
+}
+
 export default class ErrorBoundary extends React.Component<Props, State> {
   override state: State = { error: null };
 
@@ -29,6 +47,9 @@ export default class ErrorBoundary extends React.Component<Props, State> {
     // log capture, and as the single hook point to wire a real error reporter later
     // (e.g. Sentry) without touching the recovery UI.
     console.error('[ErrorBoundary] render error on route:', this.props.resetKey, error, info.componentStack);
+    // Verified stale-client mismatch → one bounded automatic reload; the manual
+    // recovery card below is the fallback if that single retry didn't resolve it.
+    if (isStaleChunkError(error)) attemptStaleChunkReload();
   }
 
   override componentDidUpdate(prev: Props) {

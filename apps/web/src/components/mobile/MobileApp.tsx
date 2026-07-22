@@ -4,7 +4,7 @@
 // live in tokens.css — .app-sidebar/.nav-scrim), routes to bespoke mobile
 // screens where they exist, and otherwise renders the shared route page in a
 // narrow wrapper. Global overlays (Snackbar/Dialogs) are reused as-is.
-import React, { Suspense, useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useRef, useState } from 'react';
 import { useApp } from '../../store/AppStore';
 import Sidebar, { profileInitials } from '../layout/Sidebar';
 import Snackbar from '../layout/Snackbar';
@@ -15,6 +15,7 @@ import MobileDayView from './MobileDayView';
 import MobilePrepReport from './MobilePrepReport';
 import MobilePatient from './MobilePatient';
 import MobileRecording from './MobileRecording';
+import MobileTabBar from './MobileTabBar';
 import { MenuIcon } from './icons';
 import './mobile.css';
 
@@ -26,6 +27,16 @@ interface Props {
 export default function MobileApp({ route, Page }: Props) {
   const { S, set, navigate } = useApp();
   const closeNav = () => set({ navOpen: false });
+  // A11y: when the drawer closes (scrim tap, Escape, navigation), focus returns
+  // to the control that opened it — the screen-reader/keyboard user is never
+  // stranded inside a hidden off-canvas panel.
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (wasOpen.current && !S.navOpen) menuBtnRef.current?.focus();
+    wasOpen.current = !!S.navOpen;
+  }, [S.navOpen]);
+
   const [recording, setRecording] = useState<{ pid: string; name: string; meetingId?: string } | null>(null);
   // pid may be '' for an appointment with no linked patient — record it as
   // unlinked rather than silently attributing it to the currently-selected one.
@@ -48,7 +59,7 @@ export default function MobileApp({ route, Page }: Props) {
       <a href="#main-content" className="skip-link">דלגו לתוכן הראשי</a>
 
       <header className="mob-header">
-        <button type="button" className="mob-iconbtn" aria-label="פתיחת התפריט" onClick={() => set({ navOpen: true })}>
+        <button ref={menuBtnRef} type="button" className="mob-iconbtn tap44" aria-label="פתיחת התפריט" onClick={() => set({ navOpen: true })}>
           <MenuIcon />
         </button>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -69,6 +80,8 @@ export default function MobileApp({ route, Page }: Props) {
           </Suspense>
         </ErrorBoundary>
       </main>
+
+      <MobileTabBar />
 
       {recording && <MobileRecording pid={recording.pid} name={recording.name} meetingId={recording.meetingId} onClose={() => setRecording(null)} />}
 

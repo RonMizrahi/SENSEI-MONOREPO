@@ -3,17 +3,33 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <!-- Static default only; applyThemeAttr() (store) rewrites this to the computed
+         --bg for the user's chosen theme at runtime, so it follows the in-app toggle
+         (not just the system scheme). A media-query variant here would fight that. -->
     <meta name="theme-color" content="#F3F7FD" />
     <meta name="description" content="סנסיי — מערכת לניהול קליני מבוססת AI למטפלים: תמלול פגישות, סיכומים ותובנות, מדדי תוצאה והכנה לפגישות." />
     <meta name="application-name" content="סנסיי" />
     <meta name="apple-mobile-web-app-title" content="סנסיי" />
+    <link rel="canonical" href="https://sensei-hackathon-app.vercel.app/" />
+    <!-- Open Graph / Twitter — rich link previews when the app is shared. -->
     <meta property="og:title" content="סנסיי" />
     <meta property="og:description" content="מערכת לניהול קליני מבוססת AI למטפלים." />
     <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="סנסיי" />
+    <meta property="og:locale" content="he_IL" />
+    <meta property="og:url" content="https://sensei-hackathon-app.vercel.app/" />
+    <meta property="og:image" content="https://sensei-hackathon-app.vercel.app/assets/sensei-mark.png" />
+    <meta property="og:image:alt" content="סנסיי" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="סנסיי" />
+    <meta name="twitter:description" content="מערכת לניהול קליני מבוססת AI למטפלים." />
+    <meta name="twitter:image" content="https://sensei-hackathon-app.vercel.app/assets/sensei-mark.png" />
     <link rel="icon" type="image/png" href="/assets/sensei-mark.png" />
     <link rel="apple-touch-icon" href="/assets/sensei-mark.png" />
     <title>סנסיי · דף הבית</title>
-    <script src="/hebrew-grammar.js"></script>
+    <!-- defer: run in document order after parsing (before the app module) without
+         blocking the initial HTML parse. -->
+    <script src="/hebrew-grammar.js" defer></script>
   </head>
   <body>
     <div id="root"></div>

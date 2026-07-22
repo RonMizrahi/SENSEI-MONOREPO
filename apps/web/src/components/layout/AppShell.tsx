@@ -6,8 +6,8 @@
 // render from state and wire their own local interactions.
 import React from 'react';
 import { useApp } from '../../store/AppStore';
+import { ROUTE_TITLES } from '../../nav/navConfig';
 import Sidebar from './Sidebar';
-import AppBar from './AppBar';
 import CommandPalette from './CommandPalette';
 import AiAssistant from './AiAssistant';
 import Dialogs from './Dialogs';
@@ -18,6 +18,40 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { S, set } = useApp();
   const offline = S.online === false;
   const closeNav = () => set({ navOpen: false });
+  const toggleNav = () => set((s: any) => ({ navOpen: !s.navOpen }));
+
+  // Off-canvas drawer hygiene (≤860px band): while open, lock background scroll,
+  // move focus into the drawer and trap Tab inside it (WCAG 2.4.3); on close,
+  // return focus to the menu toggle. Backdrop/Escape/navigation closing already
+  // exists (scrim below + the store's Escape cascade + navigate()).
+  const drawerWasOpen = React.useRef(false);
+  React.useEffect(() => {
+    const aside = document.querySelector<HTMLElement>('.app-sidebar');
+    if (S.navOpen && aside && window.matchMedia('(max-width: 860px)').matches) {
+      drawerWasOpen.current = true;
+      const prevOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+      aside.querySelector<HTMLElement>('[tabindex="0"]')?.focus();
+      const trap = (e: KeyboardEvent) => {
+        if (e.key !== 'Tab') return;
+        const f = Array.from(aside.querySelectorAll<HTMLElement>('[tabindex="0"], button'));
+        if (!f.length) return;
+        const first = f[0], last = f[f.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && (document.activeElement === last || !aside.contains(document.activeElement))) { e.preventDefault(); first.focus(); }
+      };
+      document.addEventListener('keydown', trap, true);
+      return () => {
+        document.body.style.overflow = prevOverflow;
+        document.removeEventListener('keydown', trap, true);
+      };
+    }
+    if (!S.navOpen && drawerWasOpen.current) {
+      drawerWasOpen.current = false;
+      document.querySelector<HTMLElement>('.nav-toggle')?.focus();
+    }
+    return undefined;
+  }, [S.navOpen]);
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
@@ -35,9 +69,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       <Sidebar />
 
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-        <AppBar />
-
-        <main id="main-content" tabIndex={-1} aria-label="תוכן ראשי" style={{ flex: 1, padding: 28, overflow: 'auto' }}>
+        <main id="main-content" tabIndex={-1} aria-label={ROUTE_TITLES[S.route] ? 'תוכן ראשי · ' + ROUTE_TITLES[S.route] : 'תוכן ראשי'} style={{ flex: 1, padding: 28, overflow: 'auto' }}>
+          {/* Off-canvas drawer opener — the ONLY relocated chrome that must live in
+              the content column (it opens the sidebar, so it can't sit inside it).
+              Hidden ≥861px by .nav-toggle CSS; flows above content ≤860px. */}
+          <button onClick={toggleNav} className="nav-toggle" aria-label="פתיחת תפריט הניווט" style={{ width: 44, height: 44, marginBottom: 16, border: '1px solid var(--divider)', borderRadius: 10, background: 'var(--surface-2)', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0 }}>
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="var(--text-secondary)" aria-hidden="true"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z" /></svg>
+          </button>
           {S.loading && (
             <div style={{ position: 'fixed', top: 0, insetInlineStart: 256, insetInlineEnd: 0, height: 3, zIndex: 50, overflow: 'hidden', background: 'var(--primary-tint)' }}>
               <div style={{ position: 'absolute', top: 0, height: 3, background: 'var(--primary)', width: '55%', animation: 'loadbar 1.1s cubic-bezier(.4,0,.2,1) infinite', borderRadius: '0 3px 3px 0' }} />

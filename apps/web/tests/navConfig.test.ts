@@ -6,9 +6,23 @@ describe('navConfig — single source of truth (v2.2.0 contract)', () => {
 
   it('exposes all sidebar destinations, grouped for scanning and discoverability', () => {
     expect(destinations.map((d) => d.key)).toEqual([
+      // upload was removed from the nav by request — it stays reachable from the
+      // home cards, agenda quick actions, patient file, and the #/upload deep link
       'dashboard', 'patients', 'calendar', 'nextMeetingReport', 'meetingHistory', 'patientArchive',
-      'settings', 'help',
+      'help', 'settings',
     ]);
+  });
+
+  it('groups the review-oriented destinations under a non-pinned "מעקב ותיעוד" label', () => {
+    // IA: the primary daily-action tools stay unlabelled at the top; the
+    // records/reference destinations (reports · history · archive) sit under a
+    // grouping label so the nav reads as "act" vs "review".
+    const raw = navConfig();
+    const trackIdx = raw.findIndex((n) => n.section === 'מעקב ותיעוד' && !n.pinned);
+    expect(trackIdx, 'a non-pinned "מעקב ותיעוד" section header must exist').toBeGreaterThan(-1);
+    const afterTrack = raw.slice(trackIdx + 1).filter((n) => n.key && !n.section).map((n) => n.key);
+    // the three review destinations immediately follow the label (before the pinned group)
+    expect(afterTrack.slice(0, 3)).toEqual(['nextMeetingReport', 'meetingHistory', 'patientArchive']);
   });
 
   it('the General utility section is pinned so Settings/Help stay reachable as the nav grows', () => {
@@ -18,7 +32,7 @@ describe('navConfig — single source of truth (v2.2.0 contract)', () => {
     const raw = navConfig();
     const pinnedIdx = raw.findIndex((n) => n.pinned);
     const pinnedKeys = raw.slice(pinnedIdx + 1).filter((n) => n.key).map((n) => n.key);
-    expect(pinnedKeys).toEqual(['settings', 'help']);
+    expect(pinnedKeys).toEqual(['help', 'settings']); // הגדרות is the FINAL menu item (pinned bottom)
   });
 
   it('every navigable top-level page has a sidebar entry (no orphaned routes)', () => {

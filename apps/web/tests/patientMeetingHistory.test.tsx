@@ -13,6 +13,22 @@ const settle = () => act(() => new Promise((r) => setTimeout(r, 120)));
 afterEach(() => { cleanup(); localStorage.clear(); });
 
 describe('patient meeting history', () => {
+  it('the sidebar entry opens the all-patients DIRECTORY even when a patient is selected (spec screen 4)', async () => {
+    // Regression: the sidebar used to preserve the selected patient, which made
+    // the directory (initial view per the spec) unreachable after any patient
+    // interaction. Per-patient history stays reachable from the patient file.
+    mount({ view: 'app', route: 'patient', patientId: 'p5' });
+    await settle();
+    const nav = [...document.querySelectorAll('.app-sidebar a')].find((a) => a.textContent?.trim() === 'היסטוריית פגישות') as HTMLElement;
+    expect(nav, 'sidebar entry exists').toBeTruthy();
+    fireEvent.click(nav);
+    await settle();
+    // directory mode: all patients listed with a search field, not one patient's sessions
+    await waitFor(() => expect(document.querySelector('#main-content input'), 'directory search field').toBeTruthy());
+    expect(document.body.textContent).toContain('דנה לוי');
+    expect(document.body.textContent).toContain('סימבה');
+  });
+
   it('shows up to 5 recent sessions on the patient page with a link to the full history', async () => {
     mount({ view: 'app', route: 'patient', patientId: 'p1' });
     await settle();
@@ -36,8 +52,11 @@ describe('patient meeting history', () => {
     fireEvent.click(document.querySelector('.pd-sess-row button[aria-label^="פגישה"]') as HTMLElement);
     await act(() => new Promise((r) => setTimeout(r, 350)));
     await waitFor(() => expect(document.querySelector('#main-content h1')?.textContent).toMatch(/פגישה/));
-    expect(document.body.textContent).toContain('תובנה');
+    expect(document.body.textContent).toContain('תובנות מרכזיות');
     expect(document.body.textContent).toContain('סיכום הפגישה');
-    expect(document.body.textContent).toContain('תמלול');
+    // the full AI summary now lives here (no separate inner screen, no transcript)
+    expect(document.body.textContent).toContain('נושאים מרכזיים');
+    expect(document.body.textContent).toContain('דגלי סיכון');
+    expect(document.body.textContent).not.toContain('תמלול');
   });
 });

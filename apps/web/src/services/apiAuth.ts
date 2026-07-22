@@ -30,6 +30,21 @@ function writeToken(token: string, opts: { remember: boolean }): void {
   } catch { /* storage unavailable */ }
 }
 
+/** Best-effort server-side logout (POST /auth/logout bumps token_version so the
+ *  Bearer token is invalidated everywhere, not just cleared locally). Fire-and-
+ *  forget: local sign-out must never block on the network. */
+export function apiLogoutBestEffort(): void {
+  const token = readToken();
+  if (!isApiConfigured() || !token) return;
+  const url = API_BASE_URL + '/auth/logout';
+  const init: RequestInit = {
+    method: 'POST',
+    headers: { Accept: 'application/json', Authorization: 'Bearer ' + token },
+    keepalive: true,
+  };
+  void fetch(url, init).catch(() => { /* offline/expired — local clear is sufficient */ });
+}
+
 export function clearApiAccessToken(): void {
   try {
     sessionStorage.removeItem(TOKEN_KEY);

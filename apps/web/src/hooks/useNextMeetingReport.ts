@@ -15,7 +15,7 @@ export interface ResolvedReport {
   intro: string
   changes: string[]
   openTopics: string[]
-  questions: string[]    // suggested opening questions (live from the API, or demo copy)
+  questions: string[]    // suggested opening questions — demo-only (empty when live)
   summary: string
   insight: string
 }
@@ -25,6 +25,7 @@ export function useNextMeetingReport(
   patientName: string,
   demoSummary: string,
   demoInsight: string,
+  meetingId?: string,
 ): ResolvedReport {
   const useApi = isApiConfigured();
   const [report, setReport] = useState<NextMeetingReport | null>(null);
@@ -42,18 +43,20 @@ export function useNextMeetingReport(
     setLoading(true);
     setError('');
     setReport(null);
-    pollNextMeetingReport(patientId, { signal: ac.signal, onUpdate: setReport })
+    pollNextMeetingReport(patientId, { signal: ac.signal, onUpdate: setReport, meetingId })
       .then((r) => {
         setReport(r);
         if (r.status === 'failed') setError(r.error || 'יצירת הדוח נכשלה');
       })
       .catch((e: any) => {
         if (e?.name === 'AbortError' || ac.signal.aborted) return;
+        // Route absent on the deployed backend — quiet fallback to the local report.
+        if (e?.code === 'NOT_AVAILABLE') return;
         setError(e?.details?.detail || e?.message || 'לא ניתן לטעון את דוח ההכנה');
       })
       .finally(() => { if (!ac.signal.aborted) setLoading(false); });
     return () => ac.abort();
-  }, [useApi, patientId]);
+  }, [useApi, patientId, meetingId]);
 
   return useMemo(() => {
     const ready = useApi && report?.status === 'ready';
@@ -65,8 +68,7 @@ export function useNextMeetingReport(
       intro: ready ? (report?.intro || '') : reportIntro(patientName),
       changes: ready ? (report?.changes || []) : REPORT_CHANGES,
       openTopics: ready ? (report?.open_topics || []) : REPORT_OPEN,
-      // Live report now carries questions (M5); fall back to demo copy if it has none.
-      questions: ready ? (report?.questions?.length ? report.questions : REPORT_QUESTIONS) : REPORT_QUESTIONS,
+      questions: ready ? [] : REPORT_QUESTIONS,
       summary: excerpt || demoSummary,
       insight: excerpt ? excerpt.slice(0, 280) : demoInsight,
     };

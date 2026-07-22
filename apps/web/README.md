@@ -1,6 +1,7 @@
 # Sensei — Therapist Management App (Frontend)
 
-**Version:** 1.2.0 · **Stack:** Vite · React 18 · TypeScript · Hebrew RTL
+**Version:** 1.59.1 · **Stack:** Vite · React 18 · TypeScript · Hebrew RTL
+**Live demo:** https://sensei-hackathon-app.vercel.app · **Repo:** [avitalg/SENSEI](https://github.com/avitalg/SENSEI) (branch `chore/maintenance-sync`)
 
 Sensei is a Hebrew-only, RTL, AI-assisted practice-management app for licensed therapists —
 the production React frontend built from the *"Sensei design 2026"* high-fidelity prototype
@@ -22,7 +23,7 @@ npm run dev            # http://localhost:3110
 npm run lint           # eslint (flat config, --max-warnings=0)
 npm run typecheck      # tsc --noEmit
 npm test               # vitest suite (unit · route smoke · a11y · canonical guards)
-npm run test:coverage  # + coverage thresholds (logic layer ≥70%; currently ~85%)
+npm run test:coverage  # + coverage thresholds (logic + services layer ≥75%; currently ~81%)
 npm run dup            # jscpd duplication guard (fails > 5%; currently ~3%)
 npm run build          # typecheck + production bundle (no source maps)
 npm run preview        # serve the production build
@@ -37,11 +38,11 @@ CI (`.github/workflows/ci.yml`) runs lint → typecheck → tests+coverage → d
 prod-dependency audit on every push/PR. A `concurrency` group cancels superseded runs on a
 PR/branch (never on `main`), so the newest run is always the authoritative status.
 
-**Monitoring:** watch the repository's **Actions** tab, or the checks on each PR. Once the repo is on
-GitHub, add a live status badge at the top of this README (replace `OWNER/REPO`):
+**Monitoring:** watch the repository's **Actions** tab, or the checks on each PR. The repo lives at
+[avitalg/SENSEI](https://github.com/avitalg/SENSEI); the CI status badge:
 
 ```md
-![CI](https://github.com/OWNER/REPO/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/avitalg/SENSEI/actions/workflows/ci.yml/badge.svg)
 ```
 
 Every automated guard's threshold and **where to change it** is documented in the enforcement table in
@@ -53,13 +54,13 @@ Every automated guard's threshold and **where to change it** is documented in th
 |---|---|---|
 | 6.1 | Therapist registration / login | `pages/auth/AuthScreens` + `services/mockAuth` — mock credentials, registration (strength meter, duplicates, terms), simulated Google, forgot→reset→done, Remember Me |
 | 6.2 | Patient management (create/edit/search) | `PatientsPage`, `PatientPage` |
-| 6.3 | Session creation + attach recording | `SessionsPage`, `UploadPage` |
+| 6.3 | Session creation + attach recording | schedule dialog (`layout/Dialogs`), `UploadPage` |
 | 6.4 | Upload mp3/wav/m4a | `UploadPage` (`validateFile`) |
 | 6.5 | Transcription + speaker separation | `TranscriptPage` (two-sided therapist/patient) |
-| 6.6 | Summary / Insights / Risk Flags (PII-cleaned, not a diagnosis) | `SummaryPage` |
-| 6.7 | Timeline (patient history) | `TimelinePage` |
+| 6.6 | Summary / Insights / Risk Flags (not a diagnosis) | `SummaryPage` |
+| 6.7 | Timeline (patient history) | `PatientPage` timeline + `PatientMeetingHistoryPage` |
 | 6.8 | Prep report (what changed / open topics / goals / follow-ups) | `ReportPage` |
-| §7 | Audit-log + full data deletion (frontend views) | `settings/PrivacyTab`, dialogs |
+| §7 | Full data export + deletion (frontend views) | `settings/ProfileTab` ("הנתונים שלך"), delete dialogs |
 
 Out-of-MVP patient-facing features (§8) are intentionally not built. Transcription/LLM/RBAC/storage
 are backend scope (PRD §10) and don't exist here; the frontend displays them via seed data.
@@ -79,7 +80,7 @@ src/
   services/               ← canonical typed API client + ApiService<T> CRUD (dormant; see ARCHITECTURE.md)
   utils/                  ← search · format · dedup · styles · themeIcons · share · riskMeta/avatarColors/hg…
   components/layout/      ← AppShell: sidebar, appbar, ⌘K palette, AI assistant, notifications, dialogs, snackbar
-  components/shared/      ← Pager · ErrorBoundary · ShareMenu (WhatsApp/Email)
+  components/shared/      ← Pager · ErrorBoundary · ShareMenu · PrivacyNotice · Highlight · PageFallback
   pages/                  ← one lazy-loaded file per route (23) + auth/AuthScreens
 public/hebrew-grammar.js  ← gendered-Hebrew microcopy layer (window.HG)
 ```
@@ -130,16 +131,30 @@ must-revalidate` so a returning user always fetches fresh HTML that references t
 hashes — no stale UI, no dead-chunk mismatch after a deploy. There is no Service Worker, so no SW
 update lifecycle to manage. The split is guarded in `tests/canonical.test.ts`.
 
+**Live deployment:** production is on **Vercel** (project `sensei-hackathon-app`,
+https://sensei-hackathon-app.vercel.app). It is a **manual CLI deployment** — the repo is *not*
+wired to Vercel for automatic deploys, so a push does **not** redeploy. To ship a new version, run
+`npx vercel --prod` from the repo root (the local `.vercel/` link is gitignored). All headers above
+are verified live on each deploy. For true push-to-deploy, connect the GitHub repo to a Vercel
+project in the dashboard and set `chore/maintenance-sync` (or `main`) as the production branch.
+
 ## Known debt (deliberate, tracked)
 
-- `tsconfig` has full `strict` (null/any) off (the port originates from an untyped prototype) — a follow-up migration. The independent safety checks *are* on: `noUnusedLocals`/`noUnusedParameters`, `noImplicitReturns`, `noImplicitOverride`, `forceConsistentCasingInFileNames`, `noFallthroughCasesInSwitch`.
-- The Outcomes screen renders a standard-treatment table rather than the spec's full DataGrid engine.
+- The dormant API auth layer (`src/services/apiAuth.ts`) keeps its bearer token in
+  web storage. Acceptable while dormant (no backend, CSP `script-src 'self'`, no
+  XSS sinks in the codebase), but when a real backend is wired, prefer httpOnly
+  cookies (or accept and document the web-storage tradeoff explicitly).
 - No backend yet — the `src/services/` layer is dormant until `VITE_API_BASE_URL` is set and the
   store is wired to it screen-by-screen (see ARCHITECTURE.md § "Wiring a backend").
 - No Storybook / visual-regression yet.
 
 ## Docs
 
+Full topic → document map: **[docs/INDEX.md](docs/INDEX.md)** (one canonical home per topic — register new docs there).
+
+- **[docs/PRODUCT.md](docs/PRODUCT.md)** — PRD, personas, information architecture, user journeys, screen inventory.
+- **[docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md)** — design tokens, components, interaction states, responsive/RTL/motion rules.
+- **[docs/ADR.md](docs/ADR.md)** — architecture & design decision records (incl. shipped answers to the screen-spec's open questions).
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — layers, single-source-of-truth map, backend integration plan.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — setup, enforcement rules, accepted exceptions.
 - **[TESTING.md](TESTING.md)** — test stack, how to run, suite map, mocking strategy, TDD workflow, coverage expectations, limitations.

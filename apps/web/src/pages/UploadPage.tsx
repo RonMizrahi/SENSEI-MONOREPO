@@ -1,38 +1,32 @@
-// Upload / record session audio — file pick, drag&drop, or in-browser recording.
-// Offline recordings are queued in IndexedDB and synced when connectivity returns.
+// Upload / record session audio — file pick, drag & drop, or in-browser
+// recording. Offline uploads/recordings are queued in IndexedDB and synced when
+// connectivity returns.
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../store/AppStore';
 import { validateFile } from '../utils';
-import { submitUpload, usesMockUploadPipeline } from '../services/upload';
+import { fmtDate } from '../utils/dates';
+import { submitUpload, usesMockUploadPipeline, type TranscriptMode } from '../services/upload';
 import { countPendingUploads } from '../services/uploadQueue';
 import { useAudioRecorder, formatElapsed } from '../hooks/useAudioRecorder';
+import { useFocusTrap } from '../hooks/useFocusTrap';
 import { dbEventApiId, dayKey, fetchDbCalendarEvents, type CalendarUiEvent } from '../services/calendar';
 import { isApiConfigured } from '../services/apiClient';
+import { deleteMeetingTranscript, fetchMeetingTranscript } from '../services/meetingTranscript';
 import { SESSION_DATES } from '../data/sessions';
+import PrivacyNotice from '../components/shared/PrivacyNotice';
 import './upload.css';
 import { CARD_SHADOW } from '../utils/styles';
 
 const BAD_FORMAT = 'סוג הקובץ אינו נתמך. אנא העלו קובץ בפורמט MP3, WAV או M4A.';
 
-const PRIVACY_POINTS = [
-  { icon: 'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z', text: 'מוצפן בהעברה ובאחסון (AES-256)' },
-  { icon: 'M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4z', text: 'ניקוי פרטים מזהים (PII) לפני ניתוח ה-AI' },
-  { icon: 'M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z', text: 'קובץ האודיו נמחק אוטומטית לאחר התמלול' },
-  { icon: 'M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z', text: 'גישה מבוקרת. רק אתם רואים את המטופלים שלכם' },
-];
-
 type InputMode = 'file' | 'record';
 
+// Meeting Date is a DATE-ONLY field (DD/MM/YY) — no time component anywhere in
+// the upload flow. The picker lists the patient's meetings by calendar date;
+// fmtDate reads local Y/M/D directly, so the selected date never shifts across
+// time zones or locales.
 function formatMeetingDateOption(e: CalendarUiEvent): string {
-  const d = e.start;
-  const datePart =
-    String(d.getDate()).padStart(2, '0') + '.' +
-    String(d.getMonth() + 1).padStart(2, '0') + '.' +
-    d.getFullYear();
-  const timePart =
-    String(d.getHours()).padStart(2, '0') + ':' +
-    String(d.getMinutes()).padStart(2, '0');
-  return datePart + ' · ' + timePart;
+  return fmtDate(e.start);
 }
 
 function isPastOrStartedMeeting(e: CalendarUiEvent, now = new Date()): boolean {
@@ -48,6 +42,10 @@ export default function UploadPage() {
   const inputMode: InputMode = S.uploadInputMode === 'record' ? 'record' : 'file';
   const [patientMeetings, setPatientMeetings] = useState<CalendarUiEvent[]>([]);
   const [uploadMeetingId, setUploadMeetingId] = useState('');
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
+  const [conflictOpen, setConflictOpen] = useState(false);
+  const conflictTrapRef = useFocusTrap<HTMLDivElement>(conflictOpen);
+  const [checkingConflict, setCheckingConflict] = useState(false);
 
   useEffect(() => () => { abortRef.current?.abort(); }, []);
 
@@ -77,8 +75,8 @@ export default function UploadPage() {
       const patient = (S.patients || []).find((p: any) => p.id === uploadPid);
       const count = patient ? Math.min(8, Math.max(3, Number(patient.sessions) || 6)) : 6;
       const demo: CalendarUiEvent[] = SESSION_DATES.slice(0, count).map((dateLabel, i) => {
-        const [dd, mm, yyyy] = dateLabel.split('.').map(Number);
-        const start = new Date(yyyy, mm - 1, dd, 9, 0, 0, 0);
+        const [dd, mm, yy] = dateLabel.split('/').map(Number);
+        const start = new Date(2000 + yy, mm - 1, dd, 9, 0, 0, 0);
         const end = new Date(start.getTime() + 50 * 60_000);
         return {
           id: 'demo-' + uploadPid + '-' + (count - i),
@@ -114,6 +112,8 @@ export default function UploadPage() {
         setPatientMeetings(past);
         setUploadMeetingId((prev) => {
           if (prev && past.some((e) => dbEventApiId(e.id) === prev)) return prev;
+          const preferred = S.meetingId ? String(S.meetingId) : '';
+          if (preferred && past.some((e) => dbEventApiId(e.id) === preferred)) return preferred;
           return past[0] ? dbEventApiId(past[0].id) : '';
         });
       })
@@ -124,7 +124,7 @@ export default function UploadPage() {
         }
       });
     return () => ac.abort();
-  }, [apiMode, uploadPid, S.patients]);
+  }, [apiMode, uploadPid, S.patients, S.meetingId]);
 
   const selectedMeeting = patientMeetings.find((e) => {
     const id = apiMode ? dbEventApiId(e.id) : e.id;
@@ -149,7 +149,26 @@ export default function UploadPage() {
     countPendingUploads().then((n) => set({ pendingUploadCount: n }));
   };
 
-  const runUpload = async (file: File) => {
+  const storedTranscriptForPatient = S.transcriptsByPatient?.[uploadPid] || null;
+  const meetingIdForCompare = apiMode && uploadMeetingId
+    ? dbEventApiId(uploadMeetingId)
+    : uploadMeetingId;
+
+  const localMeetingHasTranscript = !!(
+    storedTranscriptForPatient
+    && meetingIdForCompare
+    && String(storedTranscriptForPatient.meetingId) === String(meetingIdForCompare)
+    && String(storedTranscriptForPatient.text || '').trim()
+  );
+
+  const probeMeetingTranscript = async (): Promise<boolean> => {
+    if (!uploadMeetingId) return false;
+    if (!apiMode) return localMeetingHasTranscript;
+    const found = await fetchMeetingTranscript(meetingIdForCompare);
+    return found !== null;
+  };
+
+  const runUpload = async (file: File, transcriptMode: TranscriptMode = 'create') => {
     if (apiMode && !uploadMeetingId) {
       set({ upload: { state: 'error', progress: 0, fileName: file.name, error: 'נא לבחור פגישה מהיומן לפני ההעלאה' } });
       return;
@@ -159,9 +178,17 @@ export default function UploadPage() {
     abortRef.current = ac;
     set({ upload: { state: 'uploading', progress: 0, fileName: file.name, error: '' } });
     try {
+      // Server enforces 1 transcript per meeting — clear before a replace upload.
+      if (apiMode && transcriptMode === 'replace' && uploadMeetingId) {
+        await deleteMeetingTranscript(uploadMeetingId, ac.signal);
+      }
       const result = await submitUpload(file, {
         patientId: uploadPid,
         meetingId: uploadMeetingId || undefined,
+        transcriptMode,
+        existingTranscriptText: transcriptMode === 'append'
+          ? (storedTranscriptForPatient?.text || '')
+          : undefined,
         sessionDate: selectedMeeting ? dayKey(selectedMeeting.start) : undefined,
         online: S.online !== false,
         onProgress: (p) => set((s: any) => ({ upload: { ...s.upload, progress: p } })),
@@ -206,26 +233,63 @@ export default function UploadPage() {
     }
   };
 
-  const onUploadFile = (file: File | undefined) => {
+  const onUploadFile = async (file: File | undefined) => {
     if (!file) return;
     if (!validateFile(file.name)) {
       set({ upload: { state: 'error', progress: 0, fileName: file.name, error: BAD_FORMAT } });
       return;
     }
-    runUpload(file);
+    if (!uploadMeetingId && apiMode) {
+      set({ upload: { state: 'error', progress: 0, fileName: file.name, error: 'נא לבחור פגישה מהיומן לפני ההעלאה' } });
+      return;
+    }
+    setCheckingConflict(true);
+    try {
+      const hasTranscript = await probeMeetingTranscript();
+      if (hasTranscript) {
+        setPendingFile(file);
+        setConflictOpen(true);
+        return;
+      }
+      await runUpload(file, 'create');
+    } catch (e: any) {
+      set({ upload: { state: 'error', progress: 0, fileName: file.name, error: e?.message || 'לא ניתן לבדוק תמלול קיים' } });
+    } finally {
+      setCheckingConflict(false);
+    }
+  };
+
+  const closeConflict = () => {
+    setConflictOpen(false);
+    setPendingFile(null);
+  };
+
+  const confirmConflict = async (mode: TranscriptMode) => {
+    const file = pendingFile;
+    closeConflict();
+    if (!file) return;
+    await runUpload(file, mode);
   };
 
   const onDragOver = (e: any) => { e.preventDefault(); set({ upload: { ...S.upload, state: 'dragging' } }); };
   const onDragLeave = (e: any) => { e.preventDefault(); set({ upload: { ...S.upload, state: 'idle' } }); };
+  // Offline demo only: fabricate a sample recording so the journey is explorable
+  // without a real audio file. When the API is connected (even via "מצב הדגמה"),
+  // always use the native picker — fake bytes must never hit the server.
+  const useDemoSample = S.demoMode && !apiMode;
   const onDrop = (e: any) => {
     e.preventDefault();
     const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-    if (f) onUploadFile(f); else runUpload(new File(['x'], 'פגישה_22-06.mp3', { type: 'audio/mpeg' }));
+    if (f) { void onUploadFile(f); return; }
+    // No real file (e.g. text/link dropped from another app).
+    if (useDemoSample) void onUploadFile(new File(['x'], 'פגישה_22-06.mp3', { type: 'audio/mpeg' }));
+    else { set({ upload: { ...S.upload, state: 'idle' } }); }
   };
   const pickFile = () => {
+    if (useDemoSample) { void onUploadFile(new File(['x'], 'פגישה_22-06.mp3', { type: 'audio/mpeg' })); return; }
     const inp = document.createElement('input');
     inp.type = 'file'; inp.accept = '.mp3,.wav,.m4a,.webm,.ogg,audio/*';
-    inp.onchange = (e: any) => onUploadFile(e.target.files[0]);
+    inp.onchange = (e: any) => { void onUploadFile(e.target.files[0]); };
     inp.click();
   };
   const simulateBad = () => set({ upload: { state: 'error', progress: 0, fileName: 'video.mp4', error: BAD_FORMAT } });
@@ -245,7 +309,7 @@ export default function UploadPage() {
   };
   const finishRecording = async () => {
     const file = await recorder.stop();
-    if (file) onUploadFile(file);
+    if (file) await onUploadFile(file);
   };
 
   const goSummaryFromUpload = () => navigate('summary', { patientId: S.uploadPatientId || S.patientId });
@@ -270,7 +334,7 @@ export default function UploadPage() {
         <div style={{ display: 'flex', gap: 14, marginBottom: 20, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 180 }}>
             <label style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--text-2)', marginBottom: 6 }}>מטופל</label>
-            <select aria-label="בחירת מטופל להעלאה" value={uploadPid} onChange={(e) => set({ uploadPatientId: e.target.value })} style={{ width: '100%', height: 44, border: '1px solid var(--border-input)', borderRadius: 10, padding: '0 12px', fontSize: 14.5, background: 'var(--paper)', outline: 'none', cursor: 'pointer', color: 'var(--text)' }}>
+            <select aria-label="בחירת מטופל להעלאה" value={uploadPid} onChange={(e) => set({ uploadPatientId: e.target.value })} className="app-select" style={{ width: '100%' }}>
               {S.patients.map((p: any) => (<option key={p.id} value={p.id}>{p.name}</option>))}
             </select>
           </div>
@@ -281,7 +345,8 @@ export default function UploadPage() {
               value={uploadMeetingId}
               onChange={(e) => setUploadMeetingId(e.target.value)}
               dir="ltr"
-              style={{ width: '100%', height: 44, border: '1px solid var(--border-input)', borderRadius: 10, padding: '0 12px', fontSize: 14.5, background: 'var(--paper)', outline: 'none', cursor: 'pointer', color: 'var(--text)', textAlign: 'start' }}
+              className="app-select"
+              style={{ width: '100%', textAlign: 'start' }}
             >
               {patientMeetings.length === 0 && (
                 <option value="">אין פגישות קודמות למטופל זה</option>
@@ -310,9 +375,9 @@ export default function UploadPage() {
               <svg viewBox="0 0 24 24" width="34" height="34" fill="var(--primary)"><path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" /></svg>
             </div>
             <h2 style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 700 }}>גררו קובץ לכאן או בחרו מהמחשב</h2>
-            <p style={{ margin: '0 0 18px', color: 'var(--text-secondary)', fontSize: 14 }}>פורמטים נתמכים: MP3, WAV, M4A · עד 200MB</p>
-            <button onClick={pickFile} style={{ height: 44, padding: '0 22px', border: 'none', borderRadius: 10, background: 'var(--primary)', color: 'var(--paper)', fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>בחירת קובץ</button>
-            {S.demoMode && <div style={{ marginTop: 14 }}><a onClick={simulateBad} className="upl-demo-link" style={{ fontSize: 12.5, color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline' }}>הדגמת שגיאת פורמט</a></div>}
+            <p style={{ margin: '0 0 18px', color: 'var(--text-secondary)', fontSize: 14 }}>פורמטים נתמכים: MP3, WAV, M4A · עד 25MB</p>
+            <button onClick={pickFile} disabled={checkingConflict} style={{ height: 44, padding: '0 22px', border: 'none', borderRadius: 10, background: 'var(--primary)', color: 'var(--paper)', fontSize: 14.5, fontWeight: 700, cursor: checkingConflict ? 'default' : 'pointer', opacity: checkingConflict ? 0.6 : 1 }}>{checkingConflict ? 'בודקים…' : 'בחירת קובץ'}</button>
+            {useDemoSample && <div style={{ marginTop: 14 }}><button type="button" onClick={simulateBad} className="upl-demo-link" style={{ border: 'none', background: 'none', padding: 0, font: 'inherit', fontSize: 12.5, color: 'var(--text-muted)', cursor: 'pointer', textDecoration: 'underline' }}>הדגמת שגיאת פורמט</button></div>}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, flexWrap: 'wrap', marginTop: 16, fontSize: 12.5, color: 'var(--text-muted)' }}>
             <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>מה קורה אחרי ההעלאה:</span>
@@ -464,22 +529,65 @@ export default function UploadPage() {
           </div>
         )}
 
-        <div style={{ marginTop: 20, paddingTop: 18, borderTop: '1px solid var(--line)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 13 }}>
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="var(--success)"><path d="M12 1 3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-2 16-4-4 1.41-1.41L10 14.17l6.59-6.59L18 9l-8 8z" /></svg>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>ההקלטה שלכם מאובטחת</span>
-          </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '11px 18px' }}>
-            {PRIVACY_POINTS.map((pp, i) => (
-              <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 9 }}>
-                <svg viewBox="0 0 24 24" width="17" height="17" fill="var(--success)" style={{ flexShrink: 0, marginTop: 1 }}><path d={pp.icon} /></svg>
-                <span style={{ fontSize: 13, color: 'var(--text-2)', lineHeight: 1.45 }}>{pp.text}</span>
-              </div>
-            ))}
-          </div>
-          <a onClick={openHelp} className="upl-policy-link" style={{ display: 'inline-block', marginTop: 13, fontSize: 12.5, fontWeight: 600, color: 'var(--primary)', cursor: 'pointer' }}>מדיניות הפרטיות והאבטחה המלאה ›</a>
+        <div style={{ marginTop: 18, paddingTop: 16, borderTop: '1px solid var(--line)', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+          <PrivacyNotice />
+          <button type="button" onClick={openHelp} className="upl-policy-link" style={{ border: 'none', background: 'none', padding: 0, font: 'inherit', fontSize: 12.5, fontWeight: 600, color: 'var(--primary)', cursor: 'pointer' }}>מדיניות הפרטיות המלאה ›</button>
         </div>
       </div>
+
+      {conflictOpen && (
+        <div
+          role="presentation"
+          onClick={closeConflict}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(15,28,46,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 160, padding: 20 }}
+        >
+          <div
+            ref={conflictTrapRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="upl-conflict-title"
+            aria-describedby="upl-conflict-desc"
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); closeConflict(); } }}
+            style={{ background: 'var(--paper)', borderRadius: 15, width: '100%', maxWidth: 520, boxShadow: '0 24px 70px rgba(8,20,40,.35)', padding: 28, animation: 'pop .2s ease' }}
+          >
+            <div style={{ display: 'flex', gap: 16, marginBottom: 20 }}>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--warning-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg viewBox="0 0 24 24" width="26" height="26" fill="var(--warning-strong)"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" /></svg>
+              </div>
+              <div>
+                <h2 id="upl-conflict-title" style={{ margin: '0 0 6px', fontSize: 18, fontWeight: 700 }}>לפגישה זו כבר יש תמלול</h2>
+                <p id="upl-conflict-desc" style={{ margin: 0, color: 'var(--text-secondary)', fontSize: 14.5, lineHeight: 1.6 }}>
+                  ניתן להוסיף את האודיו החדש לתמלול הקיים, להחליף אותו לחלוטין, או לבטל את ההעלאה.
+                </p>
+              </div>
+            </div>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-start', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => { void confirmConflict('append'); }}
+                style={{ height: 44, padding: '0 20px', border: 'none', borderRadius: 10, background: 'var(--primary)', color: 'var(--paper)', fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}
+              >
+                הוספה לתמלול
+              </button>
+              <button
+                type="button"
+                onClick={() => { void confirmConflict('replace'); }}
+                style={{ height: 44, padding: '0 20px', border: '1px solid var(--error)', borderRadius: 10, background: 'transparent', color: 'var(--error-dark)', fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}
+              >
+                החלפת התמלול
+              </button>
+              <button
+                type="button"
+                onClick={closeConflict}
+                style={{ height: 44, padding: '0 20px', border: '1px solid var(--border-input)', borderRadius: 10, background: 'var(--paper)', fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}
+              >
+                ביטול
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

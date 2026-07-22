@@ -10,15 +10,16 @@ A pnpm + Turborepo monorepo for **Sensei**, an AI-assisted therapist
 practice-management tool:
 
 - **`apps/api`** — NestJS 11 backend (port of the Python `senseiAPI`): JWT auth,
-  patients, calendar, audio upload → transcription (ElevenLabs) → Hebrew AI
-  summaries + next-meeting reports (Anthropic Claude). TypeORM over PostgreSQL
-  (Supabase in production, Docker `compose.yaml` locally).
-- **`apps/web`** — `@sensei/web`, the Hebrew-only RTL React 18 + Vite SPA. It has
-  **its own binding rules** — read `apps/web/CLAUDE.md` before touching it; those
-  rules (Hebrew-only, logical CSS, token colors, canonical-home guards) are not
-  repeated here.
-- **`packages/typescript-config`**, **`packages/eslint-config`** — shared presets
-  consumed as `@repo/*` workspace deps.
+  patients, calendar, audio → transcription (ElevenLabs) → Hebrew AI summaries +
+  next-meeting/per-meeting reports (Anthropic Claude), and the **assistant**
+  (`src/assistant/` — `POST /assistant/chat` streams a Vercel AI-SDK UI Message
+  Stream via OpenAI + a tool-call loop over PHI-safe `/assistant/context/*`;
+  optional Langfuse). TypeORM over PostgreSQL (Supabase in prod, Docker locally).
+- **`apps/web`** — `@sensei/web` (v1.59.1), the Hebrew-only RTL React 18 + Vite
+  SPA with **its own binding rules** — read `apps/web/CLAUDE.md` first (Hebrew-only,
+  logical CSS, token colors, canonical-home guards). Its AI chat panel streams from
+  `/assistant/chat` when `VITE_API_BASE_URL` is set (else canned demo replies).
+- **`packages/*`** — `@repo/typescript-config` + `@repo/eslint-config` shared presets.
 
 Node ≥ 24, pnpm ≥ 11. Docker is needed for local Postgres and integration tests.
 

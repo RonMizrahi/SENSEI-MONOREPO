@@ -17,8 +17,8 @@ export interface CmdRoute { label: string; icon: string; go: () => void }
 export function buildCmdRoutes(app: { set: (p: any) => void; navigate: (r: string, p?: any) => void }): CmdRoute[] {
   const { set, navigate } = app;
   const CMD_ACTIONS: CmdRoute[] = [
-    { label: 'העלאת הקלטה חדשה', icon: 'M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z', go: () => set({ route: 'upload', upload: { state: 'idle', progress: 0, fileName: '', error: '' } }) },
-    { label: 'קביעת פגישה חדשה', icon: 'M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z', go: () => set({ route: 'calendar', dialog: 'schedule', apptForm: { pid: 'p1', date: dayKey(new Date()), time: '11:00', dur: '50', description: '' }, errors: {} }) },
+    { label: 'העלאת הקלטה חדשה', icon: 'M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z', go: () => navigate('upload', { upload: { state: 'idle', progress: 0, fileName: '', error: '' } }) },
+    { label: 'קביעת פגישה חדשה', icon: 'M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z', go: () => navigate('calendar', { dialog: 'schedule', apptForm: { pid: 'p1', date: dayKey(new Date()), time: '11:00', dur: '50', description: '' }, errors: {} }) },
     { label: 'מטופל חדש', icon: 'M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z', go: () => set({ dialog: 'create', form: { name: '', phone: '', email: '' }, errors: {} }) },
     { label: 'מרכז ההתראות', icon: 'M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5S10.5 3.17 10.5 4v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z', go: () => navigate('notifications') },
     // 'עזרה ותמיכה' is intentionally not repeated here — it is now a navConfig
@@ -56,10 +56,19 @@ export default function CommandPalette() {
     : (recentPatients.length ? recentPatients : S.patients).slice(0, 4);
   const routeResults = CMD_ROUTES.filter((r) => !cq || r.label.includes(cq));
   const cmdPatientsLabel = cq ? 'מטופלים' : 'מטופלים אחרונים';
-  // unified, keyboard-navigable result list: patients first, then routes (matches render order)
+  // Escalation to the full search screen — the palette ranks patients + routes
+  // inline; the full screen (route "search") also matches SESSIONS and offers
+  // type filters. Present only when there's a query; this is the sole in-app
+  // entry point to that screen (it has no sidebar item, by design).
+  const goSearchAll = cq
+    ? () => { set({ cmdOpen: false, cmdInput: '', cmdIndex: 0, searchQuery: cq, searchType: 'all' }); navigate('search'); }
+    : null;
+  // unified, keyboard-navigable result list: patients first, then routes, then
+  // the full-search escalation (matches render order)
   const cmdActions = [
     ...patResults.map((p: any) => () => { set({ cmdOpen: false, cmdInput: '', cmdIndex: 0 }); navigate('patient', { patientId: p.id }); }),
     ...routeResults.map((r) => () => { set({ cmdOpen: false, cmdInput: '', cmdIndex: 0 }); r.go(); }),
+    ...(goSearchAll ? [goSearchAll] : []),
   ];
   const cmdTotal = cmdActions.length;
   const cmdSel = cmdTotal ? Math.max(0, Math.min(S.cmdIndex, cmdTotal - 1)) : 0;
@@ -121,11 +130,22 @@ export default function CommandPalette() {
             </>
           )}
           {cmdNoResults && (
-            <div style={{ padding: '26px 18px', textAlign: 'center' }}>
-              <div style={{ fontSize: 14, color: 'var(--text-2)', fontWeight: 600, marginBottom: 3 }}>אין תוצאות תואמות</div>
-              <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>נסו שם מטופל או פקודה אחרת</div>
+            <div style={{ padding: '22px 18px 12px', textAlign: 'center' }}>
+              <div style={{ fontSize: 14, color: 'var(--text-2)', fontWeight: 600, marginBottom: 3 }}>אין התאמות מהירות</div>
+              <div style={{ fontSize: 12.5, color: 'var(--text-muted)' }}>נסו חיפוש מלא לתוצאות מהפגישות</div>
             </div>
           )}
+          {goSearchAll && (() => {
+            const gi = patResults.length + routeResults.length; const active = gi === cmdSel;
+            return (
+              <div id={'cmdopt-' + gi} onClick={cmdActions[gi]} onMouseEnter={() => { if (S.cmdIndex !== gi) set({ cmdIndex: gi }); }} role="option" aria-selected={active ? 'true' : 'false'} className="shell-row-hover" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 18px', cursor: 'pointer', background: active ? 'var(--surface-2)' : 'transparent', borderTop: (patResults.length || routeResults.length) ? '1px solid var(--line)' : 'none' }}>
+                <div style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--primary-tint)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="var(--primary)"><path d="M15.5 14h-.79l-.28-.27a6.5 6.5 0 1 0-.7.7l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0A4.5 4.5 0 1 1 14 9.5 4.49 4.49 0 0 1 9.5 14z" /></svg>
+                </div>
+                <span style={{ fontSize: 14.5, fontWeight: 600 }}>חיפוש מלא: ״{cq}״ ›</span>
+              </div>
+            );
+          })()}
           <div style={{ padding: '10px 18px 6px', borderTop: '1px solid var(--line)', display: 'flex', gap: 14, marginTop: 4 }}>
             <span style={{ fontSize: 11.5, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}><kbd dir="ltr" style={kbdStyle}>↑↓</kbd>ניווט</span>
             <span style={{ fontSize: 11.5, color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: 5 }}><kbd dir="ltr" style={kbdStyle}>Enter</kbd>בחירה</span>

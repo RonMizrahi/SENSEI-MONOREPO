@@ -1,4 +1,5 @@
 // Shared pure helpers — ported verbatim from the prototype logic class.
+import { HE_DAYS, fmtDayMonth, fmtTime } from './dates';
 
 export interface RiskMeta { label: string; color: string; bg: string }
 
@@ -41,6 +42,49 @@ export function avatarColors(c?: string): { bg: string; color: string } {
 // (login, registration, password reset, profile). Consolidates what were three
 // different patterns (two lenient, one strict) into the strict form.
 export const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Hebrew count label: the number 1 takes a singular noun ("פגישה אחת"), not a
+// plural one ("1 פגישות"). Returns the singular phrase for 1, else "N <plural>".
+export function heCount(n: number, one: string, many: string): string {
+  return n === 1 ? one : n + ' ' + many;
+}
+
+// Time-aware Hebrew greeting for the workspace header. Single source used by the
+// desktop and mobile home so the two shells stay consistent.
+export function heGreeting(d: Date): string {
+  const h = d.getHours();
+  if (h < 5) return 'לילה טוב';
+  if (h < 12) return 'בוקר טוב';
+  if (h < 15) return 'צהריים טובים';
+  if (h < 18) return 'אחר צהריים טובים';
+  return 'ערב טוב';
+}
+
+// Relative day/time phrase for an upcoming moment ("היום · 14:00", "מחר · 09:00",
+// "יום ג׳ · 11:00", else "DD/MM · HH:MM"). Natural, scannable Hebrew.
+export function relativeWhen(when: Date, now: Date = new Date()): string {
+  const time = fmtTime(when);
+  const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOf(when) - startOf(now)) / 86400000);
+  if (days === 0) return 'היום · ' + time;
+  if (days === 1) return 'מחר · ' + time;
+  if (days > 1 && days < 7) return 'יום ' + HE_DAYS[when.getDay()] + ' · ' + time;
+  return fmtDayMonth(when) + ' · ' + time;
+}
+
+// Israeli phone: forgiving on separators (hyphens/spaces/parens), strict on the
+// digit count — 9 (landline 0X-XXXXXXX) or 10 (mobile 05X-XXXXXXX), or +972.
+// Rejects "5"/"abc" without over-restricting real formats.
+export function isValidPhone(raw: string): boolean {
+  const s = (raw || '').trim();
+  if (!s) return false;
+  const digits = s.replace(/\D/g, '');
+  if (s.startsWith('+') || digits.startsWith('972')) {
+    // +972-5X-XXXXXXX → 972 + 9 digits
+    return digits.startsWith('972') && digits.length >= 11 && digits.length <= 12;
+  }
+  return /^0[2-9]\d{7,8}$/.test(digits);
+}
 
 // File upload validation — MP3 / WAV / M4A / recorded WebM·OGG by extension (GOVERNANCE §12).
 export const SUPPORTED_FORMATS = /\.(mp3|wav|m4a|webm|ogg)$/i;

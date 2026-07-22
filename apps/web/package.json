@@ -1,11 +1,12 @@
 {
   "name": "@sensei/web",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.59.1",
   "description": "Sensei — Hebrew RTL therapist practice-management app. Production React port of the 'Sensei design 2026' prototype spec (v2.2.0).",
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:mock": "VITE_API_BASE_URL= vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "test": "vitest run",
@@ -20,6 +21,9 @@
     "package": "git archive --format=zip -o sensei-app-2026.zip HEAD"
   },
   "dependencies": {
+    "@ai-sdk/react": "^4.0.34",
+    "@tanstack/react-query": "^5.101.3",
+    "ai": "^7.0.31",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

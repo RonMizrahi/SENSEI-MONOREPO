@@ -15,7 +15,9 @@ function mount(patch: Record<string, any>) {
 }
 const settle = () => act(() => new Promise((r) => setTimeout(r, 80)));
 const byText = (t: string) => [...document.querySelectorAll('button')].find((b) => b.textContent?.includes(t)) as HTMLElement;
-const toast = () => document.querySelector('[role="alert"]') as HTMLElement;
+// Success/info toasts announce politely (role="status"); errors/warnings interrupt
+// (role="alert"). Match either so the helper finds the live region regardless of type.
+const toast = () => document.querySelector('[role="status"],[role="alert"]') as HTMLElement;
 
 afterEach(() => { cleanup(); localStorage.clear(); });
 
@@ -43,7 +45,9 @@ describe('copy-to-clipboard — clinical letter + success toast', () => {
 
     // a success toast is announced to assistive tech
     await waitFor(() => expect(toast()).toBeTruthy());
-    expect(toast().getAttribute('aria-live')).toBe('assertive');
+    // a routine success toast announces politely (not assertive) so it doesn't
+    // interrupt the screen reader mid-sentence
+    expect(toast().getAttribute('aria-live')).toBe('polite');
     expect(toast().textContent).toContain('המכתב הועתק ללוח');
   });
 

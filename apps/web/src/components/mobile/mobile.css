@@ -51,7 +51,47 @@
   flex-shrink: 0;
 }
 
-.mob-content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.mob-content { flex: 1; display: flex; flex-direction: column; min-height: 0; padding-bottom: calc(58px + env(safe-area-inset-bottom, 0px)); }
+
+/* ---- bottom navigation (thumb-reachable primary destinations) ---- */
+/* Content clears the fixed bar. Padding lives on .mob-content (the flow that
+   holds the page) — not .mob-shell — so tall content that overflows the flex
+   box (e.g. the calendar grid) still ends above the bar. */
+.mob-tabbar {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  background: var(--paper);
+  border-top: 1px solid var(--divider);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  box-shadow: 0 -2px 12px rgba(8, 20, 50, 0.06);
+}
+.mob-tab {
+  flex: 1;
+  min-height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  padding: 6px 4px;
+}
+.mob-tab.active { color: var(--primary); }
+.mob-tab:focus-visible { outline: 2px solid var(--primary); outline-offset: -3px; border-radius: 8px; }
+/* lift transient toasts above the bottom bar (mobile only — desktop has no bar) */
+@media (max-width: 767px) {
+  .snackbar { bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important; }
+}
+
 
 /* ---- day view ---- */
 .mob-monthbtn {
@@ -139,6 +179,15 @@
   padding: 0;
   flex-shrink: 0;
   font-family: inherit;
+  position: relative;
+}
+/* Touch-target expansion: the visible chip stays 34px, but the TAP area meets
+   the 44px touch guideline via an invisible overlay (clicks on a button's
+   pseudo-element hit the button). No layout shift, no visual change. */
+.mob-plus::after {
+  content: '';
+  position: absolute;
+  inset: -6.5px; /* measured from the padding box; 1.5px border + 5px reach = 44px effective */
 }
 .mob-plus.is-open { background: var(--primary-tint); border-color: var(--primary); }
 
@@ -230,7 +279,7 @@
   font-family: inherit;
   font-size: 14px;
   color: var(--text);
-  background: var(--surface);
+  background: var(--primary-surface);
   resize: none;
 }
 .mob-attach-opt {
@@ -251,57 +300,6 @@
   margin-bottom: 8px;
 }
 .mob-attach-opt:hover { border-color: var(--primary); background: var(--primary-surface); }
-
-/* ---- recording overlay ---- */
-.mob-record {
-  position: absolute;
-  inset: 0;
-  z-index: 70;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 22px;
-  padding: 24px;
-}
-.mob-record-time {
-  font-size: 44px;
-  font-weight: 800;
-  color: var(--primary);
-  font-variant-numeric: tabular-nums;
-  letter-spacing: 0.02em;
-}
-.mob-wave { display: flex; align-items: center; gap: 4px; height: 44px; }
-.mob-wave-bar {
-  width: 4px;
-  border-radius: 2px;
-  background: var(--primary);
-  transform-origin: center;
-  animation: mob-wave 0.9s ease-in-out infinite;
-}
-.mob-wave.is-paused .mob-wave-bar { animation: none; opacity: 0.3; }
-@keyframes mob-wave { 0%, 100% { transform: scaleY(0.25); } 50% { transform: scaleY(1); } }
-.mob-record-btn {
-  border-radius: 50%;
-  border: 1.5px solid var(--primary);
-  background: var(--surface);
-  color: var(--primary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-family: inherit;
-}
-.mob-record-stop {
-  width: 78px;
-  height: 78px;
-  border: none;
-  background: var(--primary);
-  color: var(--on-accent);
-  font-size: 15px;
-  font-weight: 800;
-}
 
 /* ---- screen scaffold (prep report / patient) ---- */
 .mob-screen { display: flex; flex-direction: column; height: 100%; }
@@ -399,3 +397,9 @@
 }
 .mob-card-title { font-size: 13px; font-weight: 800; color: var(--primary); margin-bottom: 8px; }
 .mob-card-body { font-size: 14px; line-height: 1.65; color: var(--text-2); }
+
+/* meeting indicator under the day number — filled only for days with scheduled
+   appointments; inverts on the selected (filled) day for contrast */
+.mob-day-dot { width: 5px; height: 5px; border-radius: 50%; background: transparent; margin-top: 3px; }
+.mob-day-dot.has { background: var(--primary); }
+.mob-day-btn.is-selected .mob-day-dot.has { background: var(--on-accent); }

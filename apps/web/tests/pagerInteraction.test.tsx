@@ -23,7 +23,7 @@ async function mountPatients() {
 describe('patients roster — no pagination', () => {
   it('renders all seeded patients at once', async () => {
     await mountPatients();
-    await waitFor(() => expect(archiveBtns().length).toBe(4));
+    await waitFor(() => expect(archiveBtns().length).toBe(5));
     expect(document.querySelector('[aria-label="ניווט בין עמודים"]')).toBeNull();
   });
 });

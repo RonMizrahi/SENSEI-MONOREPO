@@ -2,17 +2,41 @@ import { Inject, Injectable, Logger, OnApplicationBootstrap } from '@nestjs/comm
 import { randomUUID } from 'node:crypto';
 import type { AuthenticatedUser } from '../common/decorators/current-user.decorator';
 import { ResourceNotFoundException } from '../common/exceptions/app.exception';
+import { MeetingReportDto, MeetingReportListItemDto } from './dto/meeting-report.dto';
 import { NextMeetingReportDto } from './dto/next-meeting-report.dto';
 import { PatientReport } from './entities/patient-report.entity';
-import { REPORT_GENERATOR } from './report-generator.interface';
+import { GeneratedReport, REPORT_GENERATOR } from './report-generator.interface';
 import type { ReportGenerator } from './report-generator.interface';
-import { EXCERPT_MAX_CHARS, NO_SUMMARIES_ERROR, RESTART_SWEEP_ERROR } from './reports.constants';
-import { REPORTS_REPOSITORY } from './reports.repository';
+import {
+  EXCERPT_MAX_CHARS,
+  NO_SUMMARIES_ERROR,
+  RESTART_SWEEP_ERROR,
+  STATUS_PENDING,
+  STATUS_RUNNING,
+} from './reports.constants';
+import { ReadyMeetingSummary, ReadyReportFields, REPORTS_REPOSITORY } from './reports.repository';
 import type { ReportsRepository } from './reports.repository';
 
 /** Normalizes an unknown thrown value to a user-facing message. */
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+/** Assembles the persisted 'ready' fields from the source summaries and the generated content. */
+function buildReadyFields(
+  summaries: ReadyMeetingSummary[],
+  generated: GeneratedReport,
+): ReadyReportFields {
+  const mostRecent = summaries[summaries.length - 1];
+  return {
+    intro: generated.intro,
+    changes: generated.changes,
+    openTopics: generated.openTopics,
+    sourceMeetingIds: summaries.map((summary) => summary.meetingId),
+    lastSummaryExcerpt: mostRecent.text.slice(0, EXCERPT_MAX_CHARS),
+    generatedAt: new Date(),
+    model: generated.model,
+  };
 }
 
 /** Next-meeting prep report lifecycle — request, async generation, startup sweep. */
@@ -22,6 +46,9 @@ export class ReportsService implements OnApplicationBootstrap {
 
   /** Latest generation run per patient — stale in-flight runs must never write over a newer one. */
   private readonly activeRuns = new Map<string, string>();
+
+  /** Latest generation run per (patient, meeting) — same stale-run guard for per-meeting reports. */
+  private readonly activeMeetingRuns = new Map<string, string>();
 
   constructor(
     @Inject(REPORTS_REPOSITORY) private readonly reportsRepository: ReportsRepository,
@@ -110,6 +137,149 @@ export class ReportsService implements OnApplicationBootstrap {
       // bounded map: forget the entry once the latest run settles
       if (this.isCurrentRun(patientId, runId)) this.activeRuns.delete(patientId);
     }
+  }
+
+  /** Composite key for the latest per-meeting run guard. */
+  private meetingRunKey(patientId: string, meetingId: string): string {
+    return `${patientId}:${meetingId}`;
+  }
+
+  /**
+   * The caller's per-meeting reports for the patient (newest first).
+   * @throws ResourceNotFoundException when the caller owns no meeting with the patient.
+   */
+  async listForPatient(
+    user: AuthenticatedUser,
+    patientId: string,
+  ): Promise<MeetingReportListItemDto[]> {
+    if (!(await this.reportsRepository.therapistHasMeetingWithPatient(patientId, user.userId))) {
+      throw new ResourceNotFoundException('Patient', patientId);
+    }
+    const reports = await this.reportsRepository.listMeetingReports(patientId, user.userId);
+    return reports.map((report) => this.toListItem(report));
+  }
+
+  /**
+   * Verifies the meeting exists AND is owned by (patient, caller).
+   * @throws ResourceNotFoundException (404, never 403) when it does not.
+   */
+  async verifyMeetingForPatient(
+    user: AuthenticatedUser,
+    patientId: string,
+    meetingId: string,
+  ): Promise<void> {
+    const owned = await this.reportsRepository.meetingBelongsToPatientAndTherapist(
+      patientId,
+      user.userId,
+      meetingId,
+    );
+    if (!owned) throw new ResourceNotFoundException('Meeting for patient', meetingId);
+  }
+
+  /**
+   * The caller's report for a specific meeting.
+   * @throws ResourceNotFoundException when the meeting is not the caller's or has no report yet.
+   */
+  async getMeetingReport(
+    user: AuthenticatedUser,
+    patientId: string,
+    meetingId: string,
+  ): Promise<MeetingReportDto> {
+    await this.verifyMeetingForPatient(user, patientId, meetingId);
+    const report = await this.reportsRepository.findByMeeting(patientId, user.userId, meetingId);
+    if (!report) throw new ResourceNotFoundException('Meeting report for patient', meetingId);
+    return this.toMeetingDto(report, meetingId);
+  }
+
+  /**
+   * Starts (or resumes) generation for a specific meeting; a pending/running report is returned as-is.
+   * @throws ResourceNotFoundException when the meeting is not the caller's.
+   */
+  async requestMeetingReport(
+    user: AuthenticatedUser,
+    patientId: string,
+    meetingId: string,
+  ): Promise<MeetingReportDto> {
+    await this.verifyMeetingForPatient(user, patientId, meetingId);
+    const existing = await this.reportsRepository.findByMeeting(patientId, user.userId, meetingId);
+    if (existing && (existing.status === STATUS_PENDING || existing.status === STATUS_RUNNING)) {
+      return this.toMeetingDto(existing, meetingId);
+    }
+    const pending = await this.reportsRepository.resetMeetingToPending(
+      patientId,
+      user.userId,
+      meetingId,
+    );
+    const runId = randomUUID();
+    const runKey = this.meetingRunKey(patientId, meetingId);
+    this.activeMeetingRuns.set(runKey, runId);
+    void this.generateMeeting(patientId, user.userId, meetingId, runId).catch((error: unknown) => {
+      this.logger.error(
+        `Meeting report generation cleanup failed for ${patientId}/${meetingId}: ${errorMessage(error)}`,
+      );
+    });
+    return this.toMeetingDto(pending, meetingId);
+  }
+
+  /** Whether this run is still the latest for the (patient, meeting) pair. */
+  private isCurrentMeetingRun(runKey: string, runId: string): boolean {
+    return this.activeMeetingRuns.get(runKey) === runId;
+  }
+
+  /** Runs one per-meeting generation: summaries → running → ready, or failed on any error. */
+  private async generateMeeting(
+    patientId: string,
+    therapistId: string,
+    meetingId: string,
+    runId: string,
+  ): Promise<void> {
+    const runKey = this.meetingRunKey(patientId, meetingId);
+    try {
+      const summaries = await this.reportsRepository.findReadySummaries(patientId, therapistId);
+      if (!this.isCurrentMeetingRun(runKey, runId)) return;
+      if (summaries.length === 0) {
+        await this.reportsRepository.markMeetingFailed(
+          patientId,
+          therapistId,
+          meetingId,
+          NO_SUMMARIES_ERROR,
+        );
+        return;
+      }
+      await this.reportsRepository.markMeetingRunning(patientId, therapistId, meetingId);
+      const generated = await this.reportGenerator.generate(summaries);
+      if (!this.isCurrentMeetingRun(runKey, runId)) return;
+      await this.reportsRepository.markMeetingReady(
+        patientId,
+        therapistId,
+        meetingId,
+        buildReadyFields(summaries, generated),
+      );
+    } catch (error) {
+      if (!this.isCurrentMeetingRun(runKey, runId)) return;
+      await this.reportsRepository.markMeetingFailed(
+        patientId,
+        therapistId,
+        meetingId,
+        errorMessage(error),
+      );
+    } finally {
+      if (this.isCurrentMeetingRun(runKey, runId)) this.activeMeetingRuns.delete(runKey);
+    }
+  }
+
+  /** Maps a per-meeting entity row to the SPA's snake_case response contract. */
+  private toMeetingDto(report: PatientReport, meetingId: string): MeetingReportDto {
+    return { ...this.toDto(report), meeting_id: meetingId };
+  }
+
+  /** Maps a per-meeting row to its list-item shape. */
+  private toListItem(report: PatientReport): MeetingReportListItemDto {
+    return {
+      meeting_id: report.meetingId ?? '',
+      status: report.status,
+      generated_at: report.generatedAt ? report.generatedAt.toISOString() : null,
+    };
   }
 
   /** Maps the entity row to the SPA's snake_case response contract. */

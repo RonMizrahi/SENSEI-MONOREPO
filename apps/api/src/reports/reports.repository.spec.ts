@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
-import type { DataSource } from 'typeorm';
+import { IsNull, Not, type DataSource } from 'typeorm';
 import { PatientReport } from './entities/patient-report.entity';
 import { TypeormReportsRepository } from './reports.repository';
 
 interface RepoMock {
   existsBy: jest.Mock;
   exists: jest.Mock;
+  find: jest.Mock;
   findOne: jest.Mock;
   upsert: jest.Mock;
   update: jest.Mock;
@@ -40,6 +41,7 @@ describe('TypeormReportsRepository', () => {
     repoMock = {
       existsBy: jest.fn(),
       exists: jest.fn(),
+      find: jest.fn(),
       findOne: jest.fn(),
       upsert: jest.fn().mockResolvedValue({}),
       update: jest.fn().mockResolvedValue({ affected: 1 }),
@@ -66,17 +68,19 @@ describe('TypeormReportsRepository', () => {
     expect(repoMock.exists).toHaveBeenCalledWith({ where: { patientId, therapistId } });
   });
 
-  it('findByPatientAndTherapist queries by the patient AND therapist id', async () => {
+  it('findByPatientAndTherapist queries the next-meeting row (meeting_id IS NULL)', async () => {
     const patientId = randomUUID();
     const therapistId = randomUUID();
     repoMock.findOne.mockResolvedValue(null);
     await expect(
       repository.findByPatientAndTherapist(patientId, therapistId),
     ).resolves.toBeNull();
-    expect(repoMock.findOne).toHaveBeenCalledWith({ where: { patientId, therapistId } });
+    expect(repoMock.findOne).toHaveBeenCalledWith({
+      where: { patientId, therapistId, meetingId: IsNull() },
+    });
   });
 
-  it('resetToPending upserts a clean pending row keyed on (patient, therapist) and returns it', async () => {
+  it('resetToPending upserts a clean pending next-meeting row via the partial index and returns it', async () => {
     const patientId = randomUUID();
     const therapistId = randomUUID();
     const row = Object.assign(new PatientReport(), { id: randomUUID(), patientId, therapistId });
@@ -86,6 +90,7 @@ describe('TypeormReportsRepository', () => {
       {
         patientId,
         therapistId,
+        meetingId: null,
         status: 'pending',
         intro: null,
         changes: [],
@@ -96,9 +101,11 @@ describe('TypeormReportsRepository', () => {
         model: '',
         error: null,
       },
-      ['patientId', 'therapistId'],
+      { conflictPaths: ['patientId', 'therapistId'], indexPredicate: 'meeting_id IS NULL' },
     );
-    expect(repoMock.findOne).toHaveBeenCalledWith({ where: { patientId, therapistId } });
+    expect(repoMock.findOne).toHaveBeenCalledWith({
+      where: { patientId, therapistId, meetingId: IsNull() },
+    });
     expect(saved).toBe(row);
   });
 
@@ -109,18 +116,18 @@ describe('TypeormReportsRepository', () => {
     );
   });
 
-  it('mark transitions issue targeted updates scoped to (patient, therapist)', async () => {
+  it('mark transitions issue targeted updates scoped to the next-meeting row', async () => {
     const patientId = randomUUID();
     const therapistId = randomUUID();
     await repository.markRunning(patientId, therapistId);
     expect(repoMock.update).toHaveBeenCalledWith(
-      { patientId, therapistId },
+      { patientId, therapistId, meetingId: IsNull() },
       { status: 'running' },
     );
 
     await repository.markFailed(patientId, therapistId, 'נכשל');
     expect(repoMock.update).toHaveBeenCalledWith(
-      { patientId, therapistId },
+      { patientId, therapistId, meetingId: IsNull() },
       { status: 'failed', error: 'נכשל' },
     );
 
@@ -135,8 +142,76 @@ describe('TypeormReportsRepository', () => {
       model: 'claude-test',
     });
     expect(repoMock.update).toHaveBeenCalledWith(
-      { patientId, therapistId },
+      { patientId, therapistId, meetingId: IsNull() },
       expect.objectContaining({ status: 'ready', intro: 'מבוא', generatedAt, error: null }),
+    );
+  });
+
+  it('meetingBelongsToPatientAndTherapist scopes existence by meeting, patient AND therapist', async () => {
+    const patientId = randomUUID();
+    const therapistId = randomUUID();
+    const meetingId = randomUUID();
+    repoMock.exists.mockResolvedValue(true);
+    await expect(
+      repository.meetingBelongsToPatientAndTherapist(patientId, therapistId, meetingId),
+    ).resolves.toBe(true);
+    expect(repoMock.exists).toHaveBeenCalledWith({
+      where: { id: meetingId, patientId, therapistId },
+    });
+  });
+
+  it('listMeetingReports finds the per-meeting rows (meeting_id IS NOT NULL) newest first', async () => {
+    const patientId = randomUUID();
+    const therapistId = randomUUID();
+    repoMock.find.mockResolvedValue([]);
+    await expect(repository.listMeetingReports(patientId, therapistId)).resolves.toEqual([]);
+    expect(repoMock.find).toHaveBeenCalledWith({
+      where: { patientId, therapistId, meetingId: Not(IsNull()) },
+      order: { updatedAt: 'DESC' },
+    });
+  });
+
+  it('findByMeeting queries by the exact (patient, therapist, meeting) triple', async () => {
+    const patientId = randomUUID();
+    const therapistId = randomUUID();
+    const meetingId = randomUUID();
+    repoMock.findOne.mockResolvedValue(null);
+    await expect(repository.findByMeeting(patientId, therapistId, meetingId)).resolves.toBeNull();
+    expect(repoMock.findOne).toHaveBeenCalledWith({
+      where: { patientId, therapistId, meetingId },
+    });
+  });
+
+  it('resetMeetingToPending upserts via the per-meeting partial index and returns the row', async () => {
+    const patientId = randomUUID();
+    const therapistId = randomUUID();
+    const meetingId = randomUUID();
+    const row = Object.assign(new PatientReport(), { id: randomUUID(), patientId, therapistId, meetingId });
+    repoMock.findOne.mockResolvedValue(row);
+    const saved = await repository.resetMeetingToPending(patientId, therapistId, meetingId);
+    expect(repoMock.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ patientId, therapistId, meetingId, status: 'pending' }),
+      {
+        conflictPaths: ['patientId', 'therapistId', 'meetingId'],
+        indexPredicate: 'meeting_id IS NOT NULL',
+      },
+    );
+    expect(saved).toBe(row);
+  });
+
+  it('per-meeting mark transitions update the exact (patient, therapist, meeting) row', async () => {
+    const patientId = randomUUID();
+    const therapistId = randomUUID();
+    const meetingId = randomUUID();
+    await repository.markMeetingRunning(patientId, therapistId, meetingId);
+    expect(repoMock.update).toHaveBeenCalledWith(
+      { patientId, therapistId, meetingId },
+      { status: 'running' },
+    );
+    await repository.markMeetingFailed(patientId, therapistId, meetingId, 'נכשל');
+    expect(repoMock.update).toHaveBeenCalledWith(
+      { patientId, therapistId, meetingId },
+      { status: 'failed', error: 'נכשל' },
     );
   });
 

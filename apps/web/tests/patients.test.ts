@@ -69,24 +69,33 @@ describe('patients service — CRUD', () => {
     expect(pts[0].id).toBe(PID);
   });
 
-  it('PATCH /patients/{id} updates fields', async () => {
+  it('PATCH /patients/{id} sends ONLY phone/email (backend contract) and merges name locally', async () => {
     const { updatePatient } = await loadPatients();
     const p = await updatePatient(PID, { name: 'New Name', phone: '050-9999999' });
-    expect(p.name).toBe('New Name');
+    expect(p.name).toBe('New Name'); // merged client-side — not sent to the API
     expect(p.phone).toBe('050-9999999');
+    const sent = JSON.parse(fetchMock.mock.calls.at(-1)![1].body);
+    expect(Object.keys(sent).sort()).toEqual(['phone']);
   });
 
-  it('PATCH /patients/{id} archives patient', async () => {
-    const { archivePatient } = await loadPatients();
-    const p = await archivePatient(PID);
-    expect(p.archived).toBe(true);
-    expect(JSON.parse(fetchMock.mock.calls.at(-1)![1].body)).toEqual({ archived: true });
+  it('archive/restore are local lifecycle transforms — no HTTP (backend has no archive)', async () => {
+    const { archivePatient, restorePatient } = await loadPatients();
+    const callsBefore = fetchMock.mock.calls.length;
+    const rec = { id: PID, name: 'א', phone: '050', email: null, created_at: '2026-01-01' } as any;
+    const archived = archivePatient(rec);
+    expect(archived.archived).toBe(true);
+    expect(archived.archived_at).toBeTruthy();
+    const restored = restorePatient(archived);
+    expect(restored.archived).toBe(false);
+    expect(restored.archived_at).toBeNull();
+    expect(fetchMock.mock.calls.length).toBe(callsBefore);
   });
 
-  it('GET /patients?archived=true lists archived patients', async () => {
-    const { listArchivedPatients } = await loadPatients();
-    await listArchivedPatients();
-    expect(String(fetchMock.mock.calls.at(-1)![0])).toContain('/patients?archived=true');
+  it('GET /patients is sent with no query params (backend list has no filters)', async () => {
+    const { listPatients } = await loadPatients();
+    await listPatients();
+    const url = String(fetchMock.mock.calls.at(-1)![0]);
+    expect(url.endsWith('/patients')).toBe(true);
   });
 
   it('DELETE /patients/{id} returns 204', async () => {
@@ -121,7 +130,7 @@ describe('patient UI helpers', () => {
     } = await loadPatients();
     expect(patientInitials('דנה לוי')).toBe('דל');
     expect(patientAvatarColor('p1')).toMatch(/^#/);
-    expect(formatPatientSince('2026-06-17T12:00:00Z')).toBe('06.2026');
+    expect(formatPatientSince('2026-06-17T12:00:00Z')).toBe('06/26');
     expect(displayPatientEmail(null)).toBe('—');
     expect(displayPatientEmail('a@b.com')).toBe('a@b.com');
   });

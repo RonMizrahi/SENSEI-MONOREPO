@@ -127,6 +127,89 @@ describe('MockReportsRepository', () => {
     await expect(repository.findReadySummaries(randomUUID(), SEED_USER.id)).resolves.toEqual([]);
   });
 
+  describe('per-meeting reports', () => {
+    const seededMeeting = SEED_EVENTS.find((event) => event.patientId === SEEDED_PATIENT_ID);
+
+    it('meetingBelongsToPatientAndTherapist is true only for SEED_USER’s seeded meeting', async () => {
+      expect(seededMeeting).toBeDefined();
+      const meetingId = seededMeeting?.id ?? '';
+      await expect(
+        repository.meetingBelongsToPatientAndTherapist(SEEDED_PATIENT_ID, SEED_USER.id, meetingId),
+      ).resolves.toBe(true);
+      // wrong therapist
+      await expect(
+        repository.meetingBelongsToPatientAndTherapist(SEEDED_PATIENT_ID, randomUUID(), meetingId),
+      ).resolves.toBe(false);
+      // unknown meeting
+      await expect(
+        repository.meetingBelongsToPatientAndTherapist(SEEDED_PATIENT_ID, SEED_USER.id, randomUUID()),
+      ).resolves.toBe(false);
+    });
+
+    it('keeps the per-meeting row isolated from the next-meeting (meeting_id IS NULL) row', async () => {
+      const meetingId = randomUUID();
+      // next-meeting report for the patient
+      await repository.resetToPending(SEEDED_PATIENT_ID, SEED_USER.id);
+      await repository.markReady(SEEDED_PATIENT_ID, SEED_USER.id, {
+        intro: 'דוח הפגישה הבאה',
+        changes: [],
+        openTopics: [],
+        sourceMeetingIds: [],
+        lastSummaryExcerpt: null,
+        generatedAt: new Date(),
+        model: 'mock',
+      });
+
+      // per-meeting report for a specific meeting
+      const meetingRow = await repository.resetMeetingToPending(
+        SEEDED_PATIENT_ID,
+        SEED_USER.id,
+        meetingId,
+      );
+      expect(meetingRow.meetingId).toBe(meetingId);
+      expect(meetingRow.status).toBe('pending');
+
+      // the next-meeting row is untouched
+      const nextMeeting = await repository.findByPatientAndTherapist(SEEDED_PATIENT_ID, SEED_USER.id);
+      expect(nextMeeting).toMatchObject({ status: 'ready', meetingId: null });
+
+      // findByMeeting returns the per-meeting row, listMeetingReports lists it (not the null row)
+      await expect(
+        repository.findByMeeting(SEEDED_PATIENT_ID, SEED_USER.id, meetingId),
+      ).resolves.toMatchObject({ meetingId });
+      const list = await repository.listMeetingReports(SEEDED_PATIENT_ID, SEED_USER.id);
+      expect(list).toHaveLength(1);
+      expect(list[0].meetingId).toBe(meetingId);
+    });
+
+    it('walks the per-meeting lifecycle running → ready', async () => {
+      const meetingId = randomUUID();
+      await repository.resetMeetingToPending(SEEDED_PATIENT_ID, SEED_USER.id, meetingId);
+      await repository.markMeetingRunning(SEEDED_PATIENT_ID, SEED_USER.id, meetingId);
+      let row = await repository.findByMeeting(SEEDED_PATIENT_ID, SEED_USER.id, meetingId);
+      expect(row?.status).toBe('running');
+      await repository.markMeetingReady(SEEDED_PATIENT_ID, SEED_USER.id, meetingId, {
+        intro: 'מבוא',
+        changes: ['שינוי'],
+        openTopics: ['נושא'],
+        sourceMeetingIds: ['m1'],
+        lastSummaryExcerpt: 'תקציר',
+        generatedAt: new Date(),
+        model: 'mock',
+      });
+      row = await repository.findByMeeting(SEEDED_PATIENT_ID, SEED_USER.id, meetingId);
+      expect(row).toMatchObject({ status: 'ready', intro: 'מבוא', error: null });
+    });
+
+    it('markMeetingFailed records the error', async () => {
+      const meetingId = randomUUID();
+      await repository.resetMeetingToPending(SEEDED_PATIENT_ID, SEED_USER.id, meetingId);
+      await repository.markMeetingFailed(SEEDED_PATIENT_ID, SEED_USER.id, meetingId, 'נכשל');
+      const row = await repository.findByMeeting(SEEDED_PATIENT_ID, SEED_USER.id, meetingId);
+      expect(row).toMatchObject({ status: 'failed', error: 'נכשל' });
+    });
+  });
+
   it('sweeps only rows stranded in running', async () => {
     await repository.resetToPending(SEED_PATIENTS[0].id, SEED_USER.id);
     await repository.markRunning(SEED_PATIENTS[0].id, SEED_USER.id);

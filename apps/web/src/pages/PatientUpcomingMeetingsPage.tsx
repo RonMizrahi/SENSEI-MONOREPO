@@ -42,8 +42,7 @@ export default function PatientUpcomingMeetingsPage() {
           onChange={onPatientSelect}
           value={cp.name}
           aria-label="בחירת מטופל"
-          className="mh-patient-select"
-          style={{ height: 44, border: '1px solid var(--divider)', borderRadius: 10, padding: '0 14px', fontSize: 14, background: 'var(--paper)', color: 'var(--text-2)', outline: 'none', cursor: 'pointer' }}
+          className="app-select"
         >
           {S.patients.map((p: any) => <option key={p.id}>{p.name}</option>)}
         </select>

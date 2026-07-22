@@ -4,18 +4,19 @@ import {
   Entity,
   Index,
   PrimaryGeneratedColumn,
-  Unique,
   UpdateDateColumn,
 } from 'typeorm';
 import type { GenerationStatus } from '../../summaries/entities/meeting-summary.entity';
 
 /**
- * Next-meeting prep report — NEW table (`patient_reports`), no Python equivalent.
- * One live report per (patient, therapist): each therapist owns their own row so
- * therapists sharing a patient never collide (regenerated from their summaries).
+ * Prep report — NEW table (`patient_reports`), no Python equivalent. Each therapist
+ * owns their own rows (regenerated from their summaries) so therapists sharing a
+ * patient never collide. Two report kinds coexist per (patient, therapist), enforced
+ * by partial unique indexes (see migration 0013): the per-patient "next-meeting"
+ * report is the row with `meeting_id IS NULL`; each specific meeting gets its own row
+ * keyed by `meeting_id`.
  */
 @Entity('patient_reports')
-@Unique('patient_reports_patient_therapist_key', ['patientId', 'therapistId'])
 export class PatientReport {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
@@ -26,6 +27,11 @@ export class PatientReport {
 
   @Column({ name: 'therapist_id', type: 'uuid' })
   therapistId!: string;
+
+  /** Specific meeting this report is for; NULL marks the per-patient next-meeting report. */
+  @Column({ name: 'meeting_id', type: 'uuid', nullable: true })
+  @Index()
+  meetingId!: string | null;
 
   @Column({ type: 'varchar', length: 16, default: 'pending' })
   status!: GenerationStatus;

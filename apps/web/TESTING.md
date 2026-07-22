@@ -20,9 +20,9 @@ No Jest, no MSW, no Playwright/Cypress — see **Known limitations** for why.
 ## Running
 
 ```bash
-npm test               # full suite (vitest run) — 52 files, 388 tests
+npm test               # full suite (vitest run) — the current file/test count is whatever this prints; don't hardcode it in docs
 npm run test:watch     # watch mode
-npm run test:coverage  # + v8 coverage over the logic layer (thresholds 70%)
+npm run test:coverage  # + v8 coverage over the logic layer (thresholds 75%)
 ```
 
 The suite is fully offline and deterministic: no network, no real timers advanced, no
@@ -41,7 +41,6 @@ backend. CI runs `npm test` as a required gate (`.github/workflows/ci.yml`).
 | Suite | Covers |
 |---|---|
 | `utils`, `searchUtils`, `dedup`, `pager` | pure logic: risk/avatar/file-validation/recent-patient helpers, search ranking, duplicate clustering + canonical selection, pagination. `dedup` also guards the missing-phone (`—`) data-integrity rule — same-name records with no phone never auto-merge |
-| `tableSort` | sortable-table engine (`utils/tableSort`): MUI-style header cycle (unsorted→asc→desc→unsorted), `aria-sort` announcement, Hebrew text collation, numeric (not lexicographic) + DD.MM.YYYY date ordering, blanks-sort-last per type, stable order under both directions, no input mutation |
 | `hebrewGrammar` | `hg` / `hgTerm` gendered microcopy (masc/fem/neutral, definite article, liberal gender input, absent-layer fallback) |
 | `navConfig` | navigation SSOT: destination set, no orphaned routes, distinct icons, pinned utility group |
 | `urlHash` | URL-hash routing (`nav/urlHash`): round-trip of all 23 routes, patient-id deep links, unknown-route/malformed-id/injection rejection, missing-slash tolerance |
@@ -87,8 +86,9 @@ backend. CI runs `npm test` as a required gate (`.github/workflows/ci.yml`).
 
 ## Coverage expectations
 
-Coverage is scoped to the **logic layer** (`src/utils`, `store`, `hooks`, `nav`, `data`)
-with a 70% threshold across statements/branches/functions/lines (currently ~94% lines / ~84% branches).
+Coverage is scoped to the **logic layer** (`src/utils`, `store`, `hooks`, `nav`, `data`,
+`services` — the API contract layer) with a **75%** CI-enforced threshold across
+statements/branches/functions/lines (currently ~81% lines / ~82% branches).
 Presentational pages/components are **not line-covered**; they are verified by the route
 smoke suite (renders without throwing) and the axe a11y suite. This is deliberate — line
 coverage of JSX rewards shallow render tests; behavior coverage of the logic + a11y/smoke

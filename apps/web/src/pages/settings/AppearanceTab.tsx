@@ -22,9 +22,8 @@ export default function AppearanceTab() {
 
   return (
     <div style={{ maxWidth: 640 }}>
-      <h2 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 700 }}>מראה</h2>
-      <p style={{ margin: '0 0 22px', color: 'var(--text-secondary)', fontSize: 14 }}>בחרו כיצד סנסיי נראה. הבחירה נשמרת ומסתנכרנת בכל המכשירים.</p>
-      <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '.04em', marginBottom: 12 }}>ערכת נושא</div>
+      <h2 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 700 }}>ערכת נושא</h2>
+      <p style={{ margin: '0 0 18px', color: 'var(--text-secondary)', fontSize: 14 }}>בחרו כיצד סנסיי נראה. הבחירה נשמרת ומסתנכרנת בכל המכשירים.</p>
       <div role="radiogroup" aria-label="ערכת נושא" style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 12 }}>
         {THEMES.map((opt) => {
           const on = S.themePref === opt.key;

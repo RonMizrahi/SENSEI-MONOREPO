@@ -72,10 +72,14 @@ test('settings profile is served by GET /auth/me', async ({ page }) => {
 
 test('prep report renders content from the report API (no blocking error)', async ({ page }) => {
   await demoLogin(page);
-  const report = page.waitForResponse(
-    (r) => new URL(r.url()).pathname.endsWith('/next-meeting-report') && r.ok(),
-    { timeout: 20_000 },
-  );
+  // The prep report is served by the report API — the per-patient
+  // /next-meeting-report, or (when the patient has an upcoming meeting) the
+  // per-meeting /meeting-reports/{meetingId}. Accept either; the page renders
+  // from whichever the ReportPage requests.
+  const report = page.waitForResponse((r) => {
+    const path = new URL(r.url()).pathname;
+    return (path.endsWith('/next-meeting-report') || path.includes('/meeting-reports/')) && r.ok();
+  }, { timeout: 20_000 });
   await page.goto('/#/report/00000000-0000-4000-8000-0000000000a1');
   await report;
   await expect(page.getByRole('heading', { name: 'דוח הכנה לפגישה' })).toBeVisible();
