@@ -64,11 +64,18 @@ describe('ReportsService', () => {
     repository = {
       patientExists: jest.fn(),
       therapistHasMeetingWithPatient: jest.fn().mockResolvedValue(true),
+      meetingBelongsToPatientAndTherapist: jest.fn().mockResolvedValue(true),
       findByPatientAndTherapist: jest.fn(),
       resetToPending: jest.fn(),
       markRunning: jest.fn().mockResolvedValue(undefined),
       markReady: jest.fn().mockResolvedValue(undefined),
       markFailed: jest.fn().mockResolvedValue(undefined),
+      listMeetingReports: jest.fn(),
+      findByMeeting: jest.fn(),
+      resetMeetingToPending: jest.fn(),
+      markMeetingRunning: jest.fn().mockResolvedValue(undefined),
+      markMeetingReady: jest.fn().mockResolvedValue(undefined),
+      markMeetingFailed: jest.fn().mockResolvedValue(undefined),
       findReadySummaries: jest.fn(),
       failStrandedRunning: jest.fn(),
     };
@@ -298,6 +305,136 @@ describe('ReportsService', () => {
       });
       await flushAsync();
       expect(errorSpy).toHaveBeenCalled();
+    });
+  });
+
+  describe('listForPatient', () => {
+    it('throws 404 when the caller has no meeting with the patient', async () => {
+      repository.therapistHasMeetingWithPatient.mockResolvedValue(false);
+      await expect(service.listForPatient(user, randomUUID())).rejects.toBeInstanceOf(
+        ResourceNotFoundException,
+      );
+      expect(repository.listMeetingReports).not.toHaveBeenCalled();
+    });
+
+    it('maps each per-meeting row to the list-item shape', async () => {
+      const patientId = randomUUID();
+      const meetingId = randomUUID();
+      const row = pendingRow(patientId);
+      row.meetingId = meetingId;
+      row.status = 'ready';
+      row.generatedAt = new Date('2026-07-14T10:00:00Z');
+      repository.listMeetingReports.mockResolvedValue([row]);
+
+      await expect(service.listForPatient(user, patientId)).resolves.toEqual([
+        { meeting_id: meetingId, status: 'ready', generated_at: '2026-07-14T10:00:00.000Z' },
+      ]);
+      expect(repository.listMeetingReports).toHaveBeenCalledWith(patientId, user.userId);
+    });
+  });
+
+  describe('getMeetingReport', () => {
+    it('throws 404 when the meeting is not the caller’s (never reads the row)', async () => {
+      repository.meetingBelongsToPatientAndTherapist.mockResolvedValue(false);
+      await expect(
+        service.getMeetingReport(user, randomUUID(), randomUUID()),
+      ).rejects.toBeInstanceOf(ResourceNotFoundException);
+      expect(repository.findByMeeting).not.toHaveBeenCalled();
+    });
+
+    it('throws 404 when the meeting has no report yet', async () => {
+      repository.findByMeeting.mockResolvedValue(null);
+      await expect(
+        service.getMeetingReport(user, randomUUID(), randomUUID()),
+      ).rejects.toBeInstanceOf(ResourceNotFoundException);
+    });
+
+    it('maps the row and echoes the meeting id in the contract', async () => {
+      const patientId = randomUUID();
+      const meetingId = randomUUID();
+      const row = pendingRow(patientId);
+      row.meetingId = meetingId;
+      row.status = 'ready';
+      repository.findByMeeting.mockResolvedValue(row);
+
+      const dto = await service.getMeetingReport(user, patientId, meetingId);
+      expect(dto).toMatchObject({ patient_id: patientId, meeting_id: meetingId, status: 'ready' });
+    });
+  });
+
+  describe('requestMeetingReport', () => {
+    it('throws 404 when the meeting is not the caller’s and never touches the row', async () => {
+      repository.meetingBelongsToPatientAndTherapist.mockResolvedValue(false);
+      await expect(
+        service.requestMeetingReport(user, randomUUID(), randomUUID()),
+      ).rejects.toBeInstanceOf(ResourceNotFoundException);
+      expect(repository.resetMeetingToPending).not.toHaveBeenCalled();
+    });
+
+    it('returns an already pending/running report as-is without restarting it', async () => {
+      const patientId = randomUUID();
+      const meetingId = randomUUID();
+      const running = pendingRow(patientId);
+      running.meetingId = meetingId;
+      running.status = 'running';
+      repository.findByMeeting.mockResolvedValue(running);
+
+      const dto = await service.requestMeetingReport(user, patientId, meetingId);
+      expect(dto).toMatchObject({ meeting_id: meetingId, status: 'running' });
+      expect(repository.resetMeetingToPending).not.toHaveBeenCalled();
+      await flushAsync();
+      expect(repository.markMeetingRunning).not.toHaveBeenCalled();
+    });
+
+    it('resets to pending and generates a settled per-meeting report', async () => {
+      const patientId = randomUUID();
+      const meetingId = randomUUID();
+      const pending = pendingRow(patientId);
+      pending.meetingId = meetingId;
+      repository.findByMeeting.mockResolvedValue(null);
+      repository.resetMeetingToPending.mockResolvedValue(pending);
+      repository.findReadySummaries.mockResolvedValue([
+        { meetingId: 'm-old', text: 'סיכום ישן' },
+        { meetingId: 'm-new', text: 'סיכום חדש' },
+      ]);
+      generator.generate.mockResolvedValue(generated);
+
+      const dto = await service.requestMeetingReport(user, patientId, meetingId);
+      expect(dto).toMatchObject({ meeting_id: meetingId, status: 'pending' });
+
+      await flushAsync();
+      expect(repository.markMeetingRunning).toHaveBeenCalledWith(patientId, user.userId, meetingId);
+      expect(repository.markMeetingReady).toHaveBeenCalledWith(
+        patientId,
+        user.userId,
+        meetingId,
+        expect.objectContaining({
+          sourceMeetingIds: ['m-old', 'm-new'],
+          lastSummaryExcerpt: 'סיכום חדש',
+          model: generated.model,
+        }),
+      );
+      expect(repository.markMeetingFailed).not.toHaveBeenCalled();
+    });
+
+    it('fails the per-meeting row with the Hebrew message when there are no ready summaries', async () => {
+      const patientId = randomUUID();
+      const meetingId = randomUUID();
+      const pending = pendingRow(patientId);
+      pending.meetingId = meetingId;
+      repository.findByMeeting.mockResolvedValue(null);
+      repository.resetMeetingToPending.mockResolvedValue(pending);
+      repository.findReadySummaries.mockResolvedValue([]);
+
+      await service.requestMeetingReport(user, patientId, meetingId);
+      await flushAsync();
+      expect(repository.markMeetingFailed).toHaveBeenCalledWith(
+        patientId,
+        user.userId,
+        meetingId,
+        NO_SUMMARIES_ERROR,
+      );
+      expect(repository.markMeetingRunning).not.toHaveBeenCalled();
     });
   });
 

@@ -48,6 +48,15 @@ const reportSchema = z.object({
   error: z.string().nullable(),
 });
 
+/** Per-meeting report contract — the next-meeting shape plus the owning meeting id. */
+const meetingReportSchema = reportSchema.extend({ meeting_id: z.uuid() });
+
+const meetingReportListItemSchema = z.object({
+  meeting_id: z.uuid(),
+  status: z.enum(['pending', 'running', 'ready', 'failed']),
+  generated_at: z.string().nullable(),
+});
+
 /** Applies env overrides for the app under test and returns a restore function. */
 function applyEnv(overrides: Record<string, string>): () => void {
   const previous = new Map<string, string | undefined>();
@@ -346,6 +355,142 @@ describe('reports (integration)', () => {
     });
     const settled = await pollUntilSettled(patientId);
     expect(reportSchema.parse(settled.body).status).toBe('ready');
+  });
+
+  describe('per-meeting reports', () => {
+    const listPathFor = (patientId: string): string =>
+      `/patients/${patientId}/meeting-reports`;
+    const meetingPathFor = (patientId: string, meetingId: string): string =>
+      `/patients/${patientId}/meeting-reports/${meetingId}`;
+
+    /** Polls the per-meeting GET until settled (200), asserting 202 on the way. */
+    async function pollMeetingUntilSettled(
+      patientId: string,
+      meetingId: string,
+    ): Promise<request.Response> {
+      const deadline = Date.now() + POLL_DEADLINE_MS;
+      for (;;) {
+        const response = await request(httpServer)
+          .get(meetingPathFor(patientId, meetingId))
+          .set('Authorization', `Bearer ${token}`);
+        if (response.status === 200) return response;
+        expect(response.status).toBe(202);
+        if (Date.now() > deadline) throw new Error('meeting report did not settle in time');
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
+      }
+    }
+
+    it('rejects unauthenticated requests', async () => {
+      await request(httpServer).get(listPathFor(randomUUID())).expect(401);
+    });
+
+    it('GET returns 404 before any report was requested for the meeting', async () => {
+      const patientId = await seedPatient();
+      const meetingId = await seedMeeting(patientId, '2026-07-05T10:00:00Z');
+      await request(httpServer)
+        .get(meetingPathFor(patientId, meetingId))
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
+    });
+
+    it('POST/GET return 404 for a meeting the caller does not own', async () => {
+      const patientId = await seedPatient();
+      // meeting belongs to the OTHER therapist → not the caller's
+      const foreignMeeting = await seedMeetingFor(otherUserId, patientId, '2026-07-06T10:00:00Z');
+      await request(httpServer)
+        .post(meetingPathFor(patientId, foreignMeeting))
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
+      await request(httpServer)
+        .get(meetingPathFor(patientId, foreignMeeting))
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
+    });
+
+    it('POST → 202 pending → poll → 200 ready, and the list reflects it', async () => {
+      const patientId = await seedPatient();
+      const olderMeeting = await seedMeeting(patientId, '2026-08-05T10:00:00Z');
+      const targetMeeting = await seedMeeting(patientId, '2026-09-05T10:00:00Z');
+      const recentText = 'ת'.repeat(EXCERPT_CAP + 30);
+      await seedSummary(olderMeeting, 'ready', 'סיכום קודם');
+      await seedSummary(targetMeeting, 'ready', recentText);
+
+      const posted = await request(httpServer)
+        .post(meetingPathFor(patientId, targetMeeting))
+        .set('Authorization', `Bearer ${token}`)
+        .expect(202);
+      expect(meetingReportSchema.parse(posted.body)).toMatchObject({
+        patient_id: patientId,
+        meeting_id: targetMeeting,
+        status: 'pending',
+      });
+
+      const settled = await pollMeetingUntilSettled(patientId, targetMeeting);
+      expect(meetingReportSchema.parse(settled.body)).toMatchObject({
+        patient_id: patientId,
+        meeting_id: targetMeeting,
+        status: 'ready',
+        intro: STUB_INTRO,
+        changes: STUB_CHANGES,
+        open_topics: STUB_OPEN_TOPICS,
+        source_meeting_ids: [olderMeeting, targetMeeting],
+        last_summary_excerpt: recentText.slice(0, EXCERPT_CAP),
+        model: STUB_MODEL,
+        error: null,
+      });
+
+      const list = await request(httpServer)
+        .get(listPathFor(patientId))
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const items = z.array(meetingReportListItemSchema).parse(list.body);
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({ meeting_id: targetMeeting, status: 'ready' });
+    });
+
+    it('does not alias the per-patient next-meeting report (they coexist)', async () => {
+      const patientId = await seedPatient();
+      const meetingId = await seedMeeting(patientId, '2026-10-05T10:00:00Z');
+      await seedSummary(meetingId, 'ready', 'סיכום משותף');
+
+      // Generate the next-meeting (per-patient) report.
+      await request(httpServer)
+        .post(pathFor(patientId))
+        .set('Authorization', `Bearer ${token}`)
+        .expect(202);
+      await pollUntilSettled(patientId);
+
+      // Generate the per-meeting report for the same meeting.
+      await request(httpServer)
+        .post(meetingPathFor(patientId, meetingId))
+        .set('Authorization', `Bearer ${token}`)
+        .expect(202);
+      await pollMeetingUntilSettled(patientId, meetingId);
+
+      // Both endpoints still return their own ready report — no collision.
+      const next = await request(httpServer)
+        .get(pathFor(patientId))
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(reportSchema.parse(next.body).status).toBe('ready');
+      const perMeeting = await request(httpServer)
+        .get(meetingPathFor(patientId, meetingId))
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(meetingReportSchema.parse(perMeeting.body)).toMatchObject({
+        meeting_id: meetingId,
+        status: 'ready',
+      });
+    });
+
+    it('list returns 404 when the caller has no meeting with the patient', async () => {
+      const patientId = await seedPatient();
+      await seedMeetingFor(otherUserId, patientId, '2026-11-05T10:00:00Z');
+      await request(httpServer)
+        .get(listPathFor(patientId))
+        .set('Authorization', `Bearer ${token}`)
+        .expect(404);
+    });
   });
 
   describe('cross-therapist isolation (IDOR)', () => {

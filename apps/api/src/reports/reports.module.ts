@@ -5,6 +5,7 @@ import { MeetingSummary } from '../summaries/entities/meeting-summary.entity';
 import { AnthropicReportGenerator } from './anthropic-report.generator';
 import { PatientReport } from './entities/patient-report.entity';
 import { MockReportGenerator } from './mock-report.generator';
+import { MeetingReportsController } from './meeting-reports.controller';
 import { MockReportsRepository } from './mock-reports.repository';
 import { REPORT_GENERATOR } from './report-generator.interface';
 import type { ReportGenerator } from './report-generator.interface';
@@ -14,12 +15,14 @@ import type { ReportsRepository } from './reports.repository';
 import { ReportsService } from './reports.service';
 
 /**
- * Next-meeting prep report — GET/POST /patients/{id}/next-meeting-report,
- * Anthropic (or canned mock) generation, patient_reports lifecycle + sweep.
+ * Prep reports — the per-patient next-meeting report (GET/POST
+ * /patients/{id}/next-meeting-report) and per-meeting reports (GET/POST
+ * /patients/{id}/meeting-reports[/{meetingId}]), Anthropic (or canned mock)
+ * generation, patient_reports lifecycle + startup sweep.
  */
 @Module({
   imports: [...(isMockMode() ? [] : [TypeOrmModule.forFeature([PatientReport, MeetingSummary])])],
-  controllers: [ReportsController],
+  controllers: [ReportsController, MeetingReportsController],
   providers: [
     ReportsService,
     provideMockSwappable<ReportsRepository>(
