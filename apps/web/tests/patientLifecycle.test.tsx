@@ -67,8 +67,12 @@ describe('delete patient — confirmation, removal, and undo', () => {
     mount({ view: 'app', route: 'patient', patientId: 'p1' });
     await settle();
     // Spec: active files are archived (reversible), never hard-deleted.
-    expect(document.querySelector('[aria-label="מחיקת מטופל לצמיתות"]'), 'no permanent-delete on an active file').toBeFalsy();
-    expect(document.querySelector('[aria-label="העברת מטופל לארכיון"]'), 'archive is offered instead').toBeTruthy();
+    // Wait for the detail page to finish rendering before asserting (CI runners
+    // can be slower than the fixed settle() delay).
+    await waitFor(() => {
+      expect(document.querySelector('[aria-label="מחיקת מטופל לצמיתות"]'), 'no permanent-delete on an active file').toBeFalsy();
+      expect(document.querySelector('[aria-label="העברת מטופל לארכיון"]'), 'archive is offered instead').toBeTruthy();
+    });
   });
 
   it('permanently deletes an ARCHIVED patient from the detail page', async () => {
